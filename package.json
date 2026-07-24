@@ -1,0 +1,15 @@
+{
+  "name": "plebly-proposals",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate-proposal.mjs",
+    "validate:all": "node scripts/validate-proposal.mjs --all"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.7.0"
+  }
+}

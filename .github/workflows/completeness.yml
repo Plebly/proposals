@@ -1,0 +1,34 @@
+name: Completeness check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Validate proposals
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            mapfile -t files < <(git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -E '^proposals/.+\.md$' || true)
+            if [ ${#files[@]} -eq 0 ]; then
+              echo "No proposal markdown changes; validating fixtures/all."
+              npm run validate:all
+              exit 0
+            fi
+            npm run validate -- "${files[@]}"
+          else
+            npm run validate:all
+          fi
