@@ -4,7 +4,7 @@ title: "Signet smoke test bounty"
 status: listed
 target_sats: null
 milestones: []
-escrow_address: "REPLACE_WITH_YOUR_SIGNET_TB1_ADDRESS"
+escrow_address: "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl"
 escrow_index: 0
 submission_fee_txid: "0000000000000000000000000000000000000000000000000000000000000000"
 created_at: "2026-07-24T00:00:00Z"
