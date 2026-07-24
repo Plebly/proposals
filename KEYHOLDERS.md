@@ -1,6 +1,32 @@
-# Keyholders
+# Testing on Signet (single-key)
 
-3-of-5 escrow multisig coordinated in Sparrow. Public keys / xpubs published here before first submission.
+Production uses 3-of-5 multisig (see below). **For development, use one signet wallet you control.**
+
+## Signet test setup
+
+1. In Sparrow (or Bitcoin Core), create a **Signet** wallet (not mainnet).
+2. Copy a **receive address** (`tb1…`).
+3. Set in `workers/wrangler.toml`:
+   - `TEST_ESCROW_ADDRESS = "tb1…your address…"`
+   - `TEST_SUBMISSION_FEE_ADDRESS = "tb1…"` (can be same wallet, different address)
+4. `npm run deploy` in `workers/`
+5. Fund from a signet faucet if needed.
+
+All test proposals share `TEST_ESCROW_ADDRESS` on signet. You can send and receive without coordinating keyholders.
+
+## What this is not
+
+- Not non-custodial production escrow
+- Not a rehearsal of multisig release
+- Do not use for real mainnet bounties
+
+Switch to the production block below before launch.
+
+---
+
+# Production keyholders (mainnet — TBD)
+
+3-of-5 escrow multisig coordinated in Sparrow. Public keys / xpubs published here before first **mainnet** submission.
 
 ## Rules
 
@@ -14,15 +40,11 @@
 ```
 wsh(sortedmulti(3,
   [FINGERPRINT1/87h/0h/0h]xpub.../0/*,
-  [FINGERPRINT2/87h/0h/0h]xpub.../0/*,
-  [FINGERPRINT3/87h/0h/0h]xpub.../0/*,
-  [FINGERPRINT4/87h/0h/0h]xpub.../0/*,
-  [FINGERPRINT5/87h/0h/0h]xpub.../0/*
+  ...
 ))
 ```
 
 Per-proposal receive address = descriptor at `/0/<escrow_index>` (see `ESCROW_INDEX.md`).
-Change chain `/1/*` is for keyholder change only — never publish as a deposit address.
 
 ## Roster (TBD)
 
@@ -31,5 +53,5 @@ Change chain `/1/*` is for keyholder change only — never publish as a deposit 
 | 1 | TBD | | |
 | 2 | TBD | | |
 | 3 | TBD | | |
-| 4 | TBD | Independent (no other Plebly role) | |
-| 5 | TBD | Independent (no other Plebly role) | |
+| 4 | TBD | Independent | |
+| 5 | TBD | Independent | |

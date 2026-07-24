@@ -37,5 +37,9 @@ Fixed at first public submission. Changes require a public process and thirty-da
 
 ## Network
 
-- Staging / rehearsal: signet
-- Public launch: Bitcoin mainnet only
+| Mode | Chain | Escrow |
+|------|-------|--------|
+| **Testing (now)** | Signet | Single `TEST_ESCROW_ADDRESS` you control — see `TESTING.md` |
+| **Launch** | Mainnet only | 3-of-5 multisig — see `KEYHOLDERS.md` |
+
+Workers default: `BITCOIN_NETWORK=signet`, mempool `https://mempool.space/signet/api`.
