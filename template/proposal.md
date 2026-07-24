@@ -15,6 +15,10 @@ created_at: "2026-01-01T00:00:00Z"
 
 # Title
 
+## Problem
+
+What gap or pain point does this address? Who benefits, and why does it matter for Bitcoin?
+
 ## Deliverable
 
 Concrete artifact: what exists when this is done (spec sections, test suite, paper question).
