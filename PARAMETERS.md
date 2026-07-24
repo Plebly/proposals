@@ -27,12 +27,40 @@ Fixed at first public submission. Changes require a public process and thirty-da
 | Funding / badge / vote confirmations | 3 |
 | Completion finality confirmations | 3 |
 
+## Claim abuse mitigations (provisional)
+
+See `plebly.fund/docs/claim-abuse-mitigations.md` (risk register). Changes require the same public process and thirty-day notice.
+
+| Parameter | Proposed default |
+|-----------|------------------|
+| Claim bond | 10,000 sats (exact, to submission-fee / ops fee address) |
+| Max active claims | 1 (pending + exclusive claimed / in_review) |
+| Claim pending TTL | 72 hours |
+| Reclaim cooldown | 30 days (after expiry, final_rejected, or abandoned release) |
+| Claim checkpoint day | 45 (from claim acceptance) |
+| Claim checkpoint grace | 7 days |
+| Claim abuse escalation threshold | 2 (expired/abandoned without completion → 2× bond) |
+| Max site claim PRs per day | 10 (Worker global) |
+| Identity relink cooldown | 7 days |
+
+### Bond rules
+
+- Bond is paid to the **submission fee / ops fee address**, not the project escrow (does not count toward claim floor).
+- **Refunded** (keyholder batch) when status reaches `completed`.
+- **Forfeited** on claim-window expiry, abandoned release after checkpoint miss, or clear bond fraud.
+- Reused bond txids are rejected.
+
+### Suspension (last resort, public)
+
+Temporary claim suspension may be set for: bond fraud, fee/bond txid replay, or sustained rate-limit evasion. Reason is always public on the profile. No silent bans.
+
 ## Addresses (TBD before launch)
 
 | Role | Address / descriptor |
 |------|----------------------|
 | Submission fee | `TBD` |
 | Platform ops (fee receive) | `TBD` |
+| Claim bond receive | Same as submission fee unless published separately |
 | Escrow receive descriptor template | See `KEYHOLDERS.md` |
 
 ## Network
