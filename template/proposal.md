@@ -7,6 +7,7 @@ milestones: []
 escrow_address: null
 escrow_index: null
 submission_fee_txid: "REPLACE_WITH_TXID"
+cover_image: null
 proposer:
   github: null
   nostr: null
