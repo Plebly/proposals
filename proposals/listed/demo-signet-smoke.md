@@ -4,7 +4,7 @@ title: "Signet smoke test bounty"
 status: listed
 target_sats: null
 milestones: []
-escrow_address: "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl"
+escrow_address: "tb1qacjkkdgkrm7fc50kws0740cdcnw78xynxgn8p5"
 escrow_index: 0
 submission_fee_txid: "0000000000000000000000000000000000000000000000000000000000000000"
 created_at: "2026-07-24T00:00:00Z"
@@ -14,7 +14,7 @@ created_at: "2026-07-24T00:00:00Z"
 
 ## Deliverable
 
-Replace this file's `escrow_address` with your signet `tb1…` address, merge to main, and confirm plebly.fund shows the bounty and mempool balance.
+Replace this file's `escrow_address` with your signet `tb1…` address for real testing. The current address is a public signet wallet used only to verify balance display on plebly.fund.
 
 ## Verification
 

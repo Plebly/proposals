@@ -26,7 +26,8 @@ Check: `curl https://plebly-api.securesovereigns.workers.dev/health`
 
 ## 3. Get signet sats
 
-- https://signet25.com/ or Bitcoin Core `generatetoaddress` on local signet
+- https://bitcoinsignetfaucet.com/ (recommended — 1k–10k sats per request)
+- https://signetfaucet.com/ (captcha; may discard bot-like requests)
 - Send a small amount to your address
 
 ## 4. List a test bounty
