@@ -7,7 +7,7 @@ Fixed at first public submission. Changes require a public process and thirty-da
 | Parameter | Value |
 |-----------|-------|
 | Submission fee | 10,000 sats (exact, non-refundable) |
-| Platform fee | 2.5% of escrow at successful disbursement |
+| Platform fee | 2.5% of escrow to Plebly at successful disbursement |
 | Milestone threshold | 1,000,000 sats |
 | Minimum funding (claim floor) | 100,000 sats |
 | Claim window | 90 days from claim acceptance |
