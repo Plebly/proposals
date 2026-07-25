@@ -21,7 +21,7 @@ Related: [`TESTING.md`](../proposals/TESTING.md), [`KEYHOLDERS.md`](../proposals
 
 ## Part A — Full signet testing (human)
 
-Signet escrow is **single-key test mode**, not production 3-of-5. Allocate always returns one shared `TEST_ESCROW_ADDRESS`. Workers do not generate or hold that key.
+Signet escrow is **`escrow_mode: single-key-test`**, not production 3-of-5. Allocate always returns one shared `TEST_ESCROW_ADDRESS` and labels the response. Workers do not generate or hold that key. **`POST /claims/outcome` completed (release authorization) is refused in this mode** — multisig is required for disbursement.
 
 ### A1. Wallet you control (required for any spend)
 

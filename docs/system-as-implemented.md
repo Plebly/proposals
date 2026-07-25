@@ -90,13 +90,27 @@ flowchart TB
 | `MEMPOOL_API` | `https://mempool.space/signet/api` |
 | `PROPOSALS_REPO` | `Plebly/proposals` |
 | `FRONTEND_ORIGIN` | `https://plebly.fund` |
-| `TEST_ESCROW_ADDRESS` | Shared signet receive (smoke / test) |
+| `TEST_ESCROW_ADDRESS` | **Only** in single-key-test mode (must be absent in multisig) |
 | `TEST_SUBMISSION_FEE_ADDRESS` | Fee/bond receive on signet |
 | KV | `USERS`, `CONTRIBUTIONS`, `SESSIONS`, `SWAPS` |
 | R2 | `MEDIA` → `plebly-media` |
 | Cron | `* * * * *` |
 
 **Secrets / vars (not all in git):** `SESSION_SECRET`, `HOOK_SECRET`, GitHub OAuth + App, `X_CLIENT_ID` / `X_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `AI_REVIEW_MODEL`, `AI_REVIEW_PROMPT_VERSION`, `BOOTSTRAP_REVIEWERS`, mainnet `SUBMISSION_FEE_ADDRESS` / `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP`.
+
+### Escrow mode boundary (hard fail)
+
+Resolved by `workers/src/lib/escrow-mode.ts` from env — **not** from `BITCOIN_NETWORK` alone:
+
+| Mode | Required env | Forbidden env |
+|------|--------------|---------------|
+| `single-key-test` | `TEST_ESCROW_ADDRESS` | `ESCROW_DESCRIPTOR`, `ESCROW_ADDRESS_MAP`; also forbidden when `BITCOIN_NETWORK=mainnet` |
+| `multisig` | `ESCROW_DESCRIPTOR` **and** `ESCROW_ADDRESS_MAP` (non-empty JSON index→address) | `TEST_ESCROW_ADDRESS` |
+| *(misconfigured)* | any other combination | — |
+
+Misconfiguration: Worker **refuses all non-`/health` requests** with HTTP 503 + `code: escrow_misconfigured` and logs the missing/conflicting vars. Cron skips work. `/health` returns `ok: false` (503) with the same mode fields so monitoring needs no mode-specific logic.
+
+`/health` always includes: `escrow_mode`, `escrow_descriptor_set`, `escrow_test_address_set`, `escrow_map_size`, `escrow_next_index`, `escrow_map_remaining`, `escrow_map_exhausted`, `escrow_config_error`.
 
 ### Frontend (`plebly.fund/src/config.ts` + Pages CI)
 
@@ -188,12 +202,17 @@ Schema: `proposals/schema/proposal.schema.json`. Template defaults empty arrays.
 
 `POST /escrow/allocate` `{ proposal_id, status: listed|declined_fundable, patch_proposal? }`:
 
-| Network | Behavior |
-|---------|----------|
-| **Signet** | Returns `TEST_ESCROW_ADDRESS`, index `0`, writes `escrow_allocated_at` + `funding_window_ends_at` (+180d); optional PR patch (default on) |
-| **Mainnet** | Requires `ESCROW_DESCRIPTOR` + address in `ESCROW_ADDRESS_MAP` for next `escrow:next_index`; else **501** |
+| Mode | Behavior |
+|------|----------|
+| **`single-key-test`** | Returns shared `TEST_ESCROW_ADDRESS`, index `0`, writes funding-window fields; response always includes `escrow_mode: "single-key-test"` (and legacy `mode`) |
+| **`multisig`** | Peeks `escrow:next_index`, looks up that index in `ESCROW_ADDRESS_MAP`; **no fallback address**. Missing index → **501** `pending_address_map` without burning the index. Success advances index and returns `escrow_mode: "multisig"` |
+| **misconfigured** | 503 before allocate runs |
 
-Does not derive addresses in-Worker from the descriptor yet — Sparrow-precomputed map is the writer companion to KV index.
+Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed `ESCROW_ADDRESS_MAP` is the writer companion to KV index. Map exhaustion: `escrow_map_remaining === 0` / `escrow_map_exhausted: true` on `/health`.
+
+### Release / disbursement gate
+
+`POST /claims/outcome` with `outcome: "completed"` (authorize keyholder disbursement after review) calls `assertMultisigForRelease`. In `single-key-test` it returns **403** `multisig_required_for_release` with an explicit error that multisig is required for disbursement. Rejected outcomes are unchanged. Workers still do not sign PSBTs — only gate the ops completion path.
 
 ---
 
@@ -209,8 +228,8 @@ Does not derive addresses in-Worker from the descriptor yet — Sparrow-precompu
 
 ### Lightning (Boltz reverse swap)
 
-- Enabled automatically on mainnet/testnet; **off on signet** unless `LIGHTNING_ENABLED=true`.
-- UI gated by `lightningUiAllowed()` (signet hidden unless Vite flags).
+- Enabled automatically on mainnet/testnet; **always off on signet** (Boltz has no signet pair).
+- UI gated by `lightningUiAllowed()` (signet always hidden).
 - `POST /lightning/invoice` verifies proposal escrow, creates reverse swap, stores encrypted secrets in `SWAPS`.
 - Cron claimer broadcasts claim into escrow; floor still uses on-chain confirmed balance only.
 - Mainnet prefers confirmed lockup before claim broadcast; signet allows mempool claim for speed.
@@ -495,14 +514,14 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 
 | Tier | Command | Risk |
 |------|---------|------|
-| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~166 tests) |
-| Frontend unit | `cd plebly.fund && npm test` | None (~45 tests) |
+| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~191 tests) |
+| Frontend unit | `cd plebly.fund && npm test` | None (~57 tests) |
 | Proposal schema + fee helpers | `cd proposals && npm run validate:all && npm test` | None |
 | Live read-only smoke | `cd workers && npm run smoke:signet` | None |
 | Mainnet readiness smoke | `cd workers && npm run smoke:mainnet` | None (refuses unless network=mainnet) |
 | Opt-in spend | Manual Sparrow on **your** signet addresses | Signet sats |
 
-Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility, resolution abuse, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation.
+Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, **escrow mode hard boundary** (`src/__tests__/escrow-mode.test.ts`: misconfig refuse, allocate mode field, map miss, release refuse in test mode, health capacity), escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility, resolution abuse, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation.
 
 ---
 
@@ -512,7 +531,7 @@ Launch ops runbook: [`docs/mainnet-launch-ops.md`](mainnet-launch-ops.md).
 
 | Gap | Notes |
 |-----|-------|
-| KEYHOLDERS production xpubs / descriptor | Still TBD in `KEYHOLDERS.md`; mainnet allocate 501 until `ESCROW_DESCRIPTOR` + `ESCROW_ADDRESS_MAP` secrets set |
+| KEYHOLDERS production xpubs / descriptor | Still TBD in `KEYHOLDERS.md`; without descriptor+map Worker is either single-key-test (signet) or **misconfigured** (refuses traffic) |
 | Mainnet fee address in PARAMETERS | Mainnet still `TBD`; **signet** CI var `SUBMISSION_FEE_ADDRESS` is set; flip to mainnet address before launch |
 | Descriptor → address derivation in Worker | **v1 deferred** — Sparrow-precomputed `ESCROW_ADDRESS_MAP` only |
 | Multisig release automation | Human keyholders + runbooks (intentional) |
@@ -561,7 +580,7 @@ Launch ops runbook: [`docs/mainnet-launch-ops.md`](mainnet-launch-ops.md).
 | Claims | `workers/src/lib/builder-claim.ts`, `claim-lifecycle.ts`, `claim-abuse.ts`, `routes/claims.ts` |
 | Reviewers / decisions | `lib/reviewers.ts`, `lib/review-decisions.ts`, `lib/review-quorum.ts`, `lib/ai-review.ts`, `lib/rebuttal.ts`, `lib/reviewer-removal.ts`, `routes/reviewers.ts` |
 | Contrib / ballots / refunds | `lib/contrib.ts`, `lib/ballots.ts`, `routes/contributions.ts`, `routes/ballots.ts`, `routes/refunds.ts` |
-| Escrow | `lib/escrow-allocate.ts`, `routes/escrow.ts` |
+| Escrow mode / allocate | `lib/escrow-mode.ts`, `lib/escrow-allocate.ts`, `routes/escrow.ts`, `__tests__/escrow-mode.test.ts` |
 | LN | `lib/claimer.ts`, `lib/boltz.ts`, `routes/lightning.ts` |
 | Auth | `routes/auth.ts` (GitHub, X PKCE, Nostr) |
 | Propose / amend | `workers/src/routes/proposals.ts`, `lib/yaml-fm.ts`, `lib/proposal-deps.ts`, `lib/proposer-match.ts` |
