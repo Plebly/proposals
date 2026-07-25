@@ -432,7 +432,7 @@ SPA routes (`plebly.fund/src/router.ts`):
 | `/account` | Profile, watching, claims (+ history), proposals; reviewer / funder links |
 | `/about` | Beliefs, parameters, residual trust |
 
-Login: nav **Log in** menu offers **GitHub** and **X** (Nostr also available via API/auth routes). Deliverable submit shows **AI first-pass** card inline. Nav includes **Reviewers**.
+Login: nav **Log in** menu offers **GitHub** and **X** (Nostr also available via API/auth routes). Deliverable submit shows **AI first-pass** card inline. **Reviewers** lives in the footer and on About (not top nav).
 
 Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutations go through Workers → PRs. Nested frontmatter parsed in `src/frontmatter.ts` (SPA) and `workers/src/lib/yaml-fm.ts` (API).
 
