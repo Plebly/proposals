@@ -452,7 +452,7 @@ SPA routes (`plebly.fund/src/router.ts`):
 | `/account` | Profile, watching, claims (+ history), proposals; reviewer / funder links |
 | `/about` | Beliefs, how-it-works, **Reviewers** governance section, parameters, residual trust, get involved |
 
-Login: nav **Log in** menu offers **GitHub** and **X** (Nostr also available via API/auth routes). Top nav: Projects · Start a project · About (+ auth). Deliverable submit shows **AI first-pass** card inline. Footer: Explore (incl. Reviewers) · Source · Follow.
+Login: nav **Log in** menu offers **GitHub** and **Nostr** (NIP-07 extension → challenge-wrapped NIP-98). X OAuth remains on the API but is hidden in the SPA until secrets are set. Top nav: Projects · Start a project · About (+ auth). Deliverable submit shows **AI first-pass** card inline. Footer: Explore (incl. Reviewers) · Source · Follow.
 
 Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutations go through Workers → PRs. Nested frontmatter parsed in `src/frontmatter.ts` (SPA) and `workers/src/lib/yaml-fm.ts` (API).
 
