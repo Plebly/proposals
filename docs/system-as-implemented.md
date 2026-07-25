@@ -3,10 +3,11 @@
 **Status:** living description of the running system (not a wishlist).  
 **Date:** 2026-07-25  
 **Network (deployed):** Bitcoin **signet**  
-**API:** https://plebly-api.securesovereigns.workers.dev (`plebly-api` v0.4.0)  
+**Escrow mode (live):** `single-key-test` (`/health.escrow_mode`)  
+**API:** https://plebly-api.securesovereigns.workers.dev (`plebly-api` v0.4.0, workers `1341574`)  
 **Site:** https://plebly.fund  
 
-Related docs: `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
+Related docs: [`remaining-human-steps.md`](remaining-human-steps.md) (ops checklist), `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
 
 ---
 
@@ -507,6 +508,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Review decision ballot | 14 days |
 | AI prompt / model | `v1` / `claude-sonnet-4-20250514` (env-overridable) |
 | Network | **signet** |
+| Escrow mode (live) | **`single-key-test`** |
 
 ---
 
@@ -527,41 +529,44 @@ Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle,
 
 ## 16. Explicit gaps / TBD (do not assume done)
 
-Launch ops runbook: [`docs/mainnet-launch-ops.md`](mainnet-launch-ops.md).
+Human checklist: [`remaining-human-steps.md`](remaining-human-steps.md).  
+Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 
 | Gap | Notes |
 |-----|-------|
-| KEYHOLDERS production xpubs / descriptor | Still TBD in `KEYHOLDERS.md`; without descriptor+map Worker is either single-key-test (signet) or **misconfigured** (refuses traffic) |
-| Mainnet fee address in PARAMETERS | Mainnet still `TBD`; **signet** CI var `SUBMISSION_FEE_ADDRESS` is set; flip to mainnet address before launch |
+| Operator-owned signet `TEST_*` addresses | Live still uses public BIP39 vector `tb1qacjkk…` — observe only until Sparrow wallet you control is wired |
+| Bootstrap reviewer identities | **Not seeded** (`count: 0`) — `scripts/bootstrap-reviewers.sh` + `REVIEWERS.md` (exactly five final ids; seats permanent) |
+| KEYHOLDERS production xpubs / descriptor | Still TBD; required for `escrow_mode=multisig` (descriptor + map, no `TEST_ESCROW_ADDRESS`) |
+| Mainnet fee address in PARAMETERS | Mainnet still `TBD`; signet CI var set; flip before launch |
+| Signet cannot authorize release | By design: `outcome: completed` → 403 in `single-key-test`; needs multisig mode |
 | Descriptor → address derivation in Worker | **v1 deferred** — Sparrow-precomputed `ESCROW_ADDRESS_MAP` only |
-| Multisig release automation | Human keyholders + runbooks (intentional) |
-| Bootstrap reviewer identities | **Not seeded** — `scripts/bootstrap-reviewers.sh` + mirror `REVIEWERS.md` (exactly five final ids; seats permanent) |
-| Anthropic key in production | Set `ANTHROPIC_API_KEY`; without it AI → ambiguous |
-| X OAuth credentials | Wired; needs portal app + secrets |
-| Lightning on signet deploy | **Always off** — no Boltz signet pair; auto-on mainnet; LN staging via `BITCOIN_NETWORK=testnet` |
-| Mainnet flip tooling | `workers/scripts/flip-to-mainnet.sh` + `deploy/mainnet.env.example` + `npm run smoke:mainnet` |
+| Multisig PSBT signing in Worker | Never — human keyholders + Sparrow / runbooks |
+| Anthropic key in production | Unset live (`ai_review: false`); without it AI → ambiguous |
+| X OAuth credentials | Unset live (`x_oauth: false`) |
+| Lightning on signet | **Always off** — auto-on mainnet; LN staging via `BITCOIN_NETWORK=testnet` |
 | Ops suspend of other users | Self-only today |
 | Automated refund batching | **v1 deferred** — register + keyholder batch only |
-| Branch-protection on Completeness | **`validate` required on `main`** (enforce_admins); keep `vars.SUBMISSION_FEE_ADDRESS` set or fee gate still skips |
+
+**Already shipped (not gaps):** escrow mode hard boundary, flip script + mainnet/signet smokes, Pages network vars, Completeness `validate` required on `main`.
 
 ---
 
 ## 17. Typical end-to-end paths (as built)
 
-### A. List and fund a bounty (signet)
+### A. List and fund a bounty (signet, `single-key-test`)
 
 1. Pay 10k fee → submit on site (milestones / depends_on / related_work as needed) → PR to `unindexed/` → merge to `main`.
 2. After merge, proposer may **Edit** in-app (amend PR) while pre-claim.
-3. Hook allocate (or manual FM) sets address + funding window → `listed` / funding.
-4. Donors send signet sats (and/or LN if enabled); balance updates on site.
+3. Hook allocate returns shared `TEST_ESCROW_ADDRESS` with `escrow_mode: "single-key-test"` + funding window → `listed` / funding.
+4. Donors send signet sats (Lightning off on signet); balance updates on site.
 5. At ≥100k confirmed, project is open to claim.
 
 ### B. Claim and deliver
 
 1. Builder pays bond → site opens claim PR → slot held in KV.
 2. Reviewer merges → cron sets `claimed_at` from `merged_at`.
-3. Checkpoint by day 45 (+grace); deliverable submit → AI first-pass → reviewer ballot (unless clear fail) → hook outcome.
-4. Hook outcome `completed` → bond refundable + earned reviewer seat.
+3. Checkpoint by day 45 (+grace); deliverable submit → AI first-pass → reviewer ballot (unless clear fail).
+4. Hook outcome `completed` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat; keyholders cosign the on-chain release out-of-band.
 
 ### C. Failure / abandon
 
@@ -586,7 +591,7 @@ Launch ops runbook: [`docs/mainnet-launch-ops.md`](mainnet-launch-ops.md).
 | Propose / amend | `workers/src/routes/proposals.ts`, `lib/yaml-fm.ts`, `lib/proposal-deps.ts`, `lib/proposer-match.ts` |
 | Frontend | `plebly.fund/src/{main,router,propose-page,propose-milestones,propose-deps,proposal-page,proposal-ui,builder-panel,review-panel,governance-page,reviewers,fee-pay,github,frontmatter}.ts` |
 | Schema / CI | `proposals/schema/proposal.schema.json`, `template/proposal.md`, `.github/workflows/completeness.yml` |
-| Launch ops | `proposals/docs/mainnet-launch-ops.md`, `proposals/scripts/bootstrap-reviewers.sh` |
+| Launch ops | `docs/remaining-human-steps.md`, `docs/mainnet-launch-ops.md`, `proposals/scripts/bootstrap-reviewers.sh`, `workers/scripts/flip-to-mainnet.sh` |
 | AI prompts | `proposals/review-prompts/v1.md` |
 | Parameters | `proposals/PARAMETERS.md`, `proposals/REVIEWERS.md`, `proposals/KEYHOLDERS.md`, `workers/src/lib/claim-params.ts`, `reviewer-params.ts` |
 
