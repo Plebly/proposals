@@ -16,7 +16,7 @@ milestones:
     out_of_scope: "Production keyholders, Lightning, or real deliverable review"
     allocation_sats: 50000
     deadline: "2026-09-15"
-escrow_address: "tb1qacjkkdgkrm7fc50kws0740cdcnw78xynxgn8p5"
+escrow_address: "tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz"
 escrow_index: 0
 submission_fee_txid: "0000000000000000000000000000000000000000000000000000000000000000"
 proposer:
@@ -34,7 +34,7 @@ Need a live signet proposal to exercise listing, balance display, and the claim 
 
 ## Deliverable
 
-Replace this file's `escrow_address` with your signet `tb1…` address for real testing. The current address is a public signet wallet used only to verify balance display on plebly.fund.
+Escrow is a Sparrow signet receive address controlled by the operator. Fund it on signet to exercise balance display and the claim-floor path.
 
 ## Verification
 
