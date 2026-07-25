@@ -77,3 +77,5 @@ Relay operators who want Commons-grade heuristics on a Knots node need a concret
 ## Notes
 
 Inspired by Bitcoin Commons `blvm-protocol` spam filter presets — especially `StrictInscriptions` (`ordinals_strict_mode`: envelope/pattern only; large witness classified separately). Escrow address will be allocated when this moves from listed demo to funded escrow.
+
+`submission_fee_txid` is the signet seed placeholder (all zeros), same convention as the smoke demo, until an operator-owned fee address receives a real 10k payment.

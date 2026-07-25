@@ -9,6 +9,9 @@
  *   CLAIM_BOND_SATS — default 10000
  *   MEMPOOL_API — e.g. https://mempool.space/signet/api or https://mempool.space/api
  *   BITCOIN_NETWORK — signet | mainnet (affects confirmed requirement)
+ *
+ * Signet note: all-zero submission_fee_txid is allowed as a seed/demo placeholder
+ * (same convention as proposals/listed/demo-signet-smoke.md). Mainnet rejects it.
  */
 import fs from "node:fs";
 import matter from "gray-matter";
@@ -59,6 +62,19 @@ for (const file of files) {
 
   if (data.submission_fee_txid) {
     const txid = String(data.submission_fee_txid);
+    // All-zero placeholder matches listed seed demos (e.g. demo-signet-smoke).
+    // Allowed on signet only while the fee address is still the observe-only test vector.
+    if (/^0{64}$/.test(txid)) {
+      if (mainnet) {
+        console.error(`${file}: zero submission_fee_txid not allowed on mainnet`);
+        failed++;
+      } else {
+        console.warn(
+          `${file}: signet seed placeholder fee txid (all zeros) — replace with a real 10k payment before mainnet`,
+        );
+      }
+      continue;
+    }
     try {
       const tx = await getTx(txid);
       if (mainnet && !tx.status?.confirmed) {
