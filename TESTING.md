@@ -2,6 +2,18 @@
 
 End-to-end checklist without multisig or mainnet.
 
+## Automated battery (no coin risk by default)
+
+| Tier | Command | Risk |
+|------|---------|------|
+| 0–1 unit + mocked API | `cd workers && npm test` | None — no broadcast, no live mempool writes |
+| 2 read-only live | `cd workers && npm run smoke:signet` | None — health + observe demo balance only |
+| Proposal schema | `cd proposals && npm run validate:all` | None |
+
+**Do not fund** the public BIP39 test-vector address `tb1qacjkk…` unless you control that key. Point `TEST_ESCROW_ADDRESS` / demo `escrow_address` at **your** wallet before any opt-in spend.
+
+**Opt-in spend (Tier 3, manual only):** set your addresses, then use Sparrow. Never enable in CI. Signet fee/bond checks are currently stubs (any found tx may pass) — do not treat a successful submit as proving fee integrity. Lightning claimer can broadcast; keep it off on signet unless you intend Boltz **testnet** behavior.
+
 ## 1. Your signet wallet
 
 - Sparrow → Settings → Network → **Signet**
