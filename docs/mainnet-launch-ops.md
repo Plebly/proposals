@@ -63,7 +63,19 @@ Then:
 |------|-----------|
 | In-Worker descriptor → address derive | **Deferred** — Sparrow + `ESCROW_ADDRESS_MAP` |
 | Automated refund batching | **Deferred** — `POST /refunds/register` + keyholder batch runbook |
-| Lightning on default signet | **Off by design** — auto-on for mainnet/testnet; signet needs `LIGHTNING_ENABLED=true` |
+| Lightning on signet | **Always off** — Boltz has no signet pair; use `BITCOIN_NETWORK=testnet` for LN staging; auto-on for mainnet |
+
+## D2. One-command flip (after A–C secrets exist)
+
+```bash
+cd workers
+cp deploy/mainnet.env.example deploy/mainnet.env
+# fill PROPOSALS_SUBMISSION_FEE_ADDRESS=bc1…
+./scripts/flip-to-mainnet.sh --env deploy/mainnet.env --confirm
+npm run smoke:mainnet
+```
+
+The script patches `wrangler.toml` network vars, comments out `TEST_*`, prompts for Worker secrets, sets GitHub vars on `Plebly/proposals` + `Plebly/plebly.fund`, deploys, and runs readiness smoke. It does **not** invent KEYHOLDERS or bootstrap reviewers.
 
 ## E. Related secrets (not in the seven-gap list)
 

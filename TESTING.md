@@ -75,6 +75,21 @@ Still **100,000 sats** in parameters. For cheap tests, fund ≥100k signet sats 
 
 ## When ready for mainnet
 
-1. Fill production section of `KEYHOLDERS.md`
-2. Set `BITCOIN_NETWORK = "mainnet"` and `MEMPOOL_API = "https://mempool.space/api"`
-3. Remove / ignore `TEST_ESCROW_*` vars
+Use the flip path (does not invent KEYHOLDERS or bootstrap reviewers):
+
+```bash
+cd workers
+cp deploy/mainnet.env.example deploy/mainnet.env   # fill PROPOSALS_SUBMISSION_FEE_ADDRESS
+./scripts/flip-to-mainnet.sh --env deploy/mainnet.env --confirm
+npm run smoke:mainnet
+```
+
+Manual gates the script does not skip:
+
+1. Publish production section of `KEYHOLDERS.md` + Sparrow `ESCROW_ADDRESS_MAP`
+2. Publish mainnet fee address in `PARAMETERS.md`
+3. Bootstrap exactly five reviewers (`scripts/bootstrap-reviewers.sh`)
+4. Confirm Pages rebuild with `VITE_BITCOIN_NETWORK=mainnet` (repo var)
+5. Hook-allocate a listed proposal — must not return `pending_keyholders` / `pending_address_map`
+
+Code invariants on flip: `feeAddress()` ignores leftover `TEST_*` on mainnet; Lightning auto-enables on mainnet; signet never enables Lightning (no Boltz pair).

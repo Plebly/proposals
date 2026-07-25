@@ -499,6 +499,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Frontend unit | `cd plebly.fund && npm test` | None (~45 tests) |
 | Proposal schema + fee helpers | `cd proposals && npm run validate:all && npm test` | None |
 | Live read-only smoke | `cd workers && npm run smoke:signet` | None |
+| Mainnet readiness smoke | `cd workers && npm run smoke:mainnet` | None (refuses unless network=mainnet) |
 | Opt-in spend | Manual Sparrow on **your** signet addresses | Signet sats |
 
 Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility, resolution abuse, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation.
@@ -518,7 +519,8 @@ Launch ops runbook: [`docs/mainnet-launch-ops.md`](mainnet-launch-ops.md).
 | Bootstrap reviewer identities | **Not seeded** — `scripts/bootstrap-reviewers.sh` + mirror `REVIEWERS.md` (exactly five final ids; seats permanent) |
 | Anthropic key in production | Set `ANTHROPIC_API_KEY`; without it AI → ambiguous |
 | X OAuth credentials | Wired; needs portal app + secrets |
-| Lightning on default signet deploy | **Off by design** — auto-on mainnet/testnet; signet needs `LIGHTNING_ENABLED=true` |
+| Lightning on signet deploy | **Always off** — no Boltz signet pair; auto-on mainnet; LN staging via `BITCOIN_NETWORK=testnet` |
+| Mainnet flip tooling | `workers/scripts/flip-to-mainnet.sh` + `deploy/mainnet.env.example` + `npm run smoke:mainnet` |
 | Ops suspend of other users | Self-only today |
 | Automated refund batching | **v1 deferred** — register + keyholder batch only |
 | Branch-protection on Completeness | **`validate` required on `main`** (enforce_admins); keep `vars.SUBMISSION_FEE_ADDRESS` set or fee gate still skips |
