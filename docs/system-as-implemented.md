@@ -1,0 +1,460 @@
+# Plebly — system as implemented
+
+**Status:** living description of the running system (not a wishlist).  
+**Date:** 2026-07-25  
+**Network (deployed):** Bitcoin **signet**  
+**API:** https://plebly-api.securesovereigns.workers.dev (`plebly-api` v0.3.0)  
+**Site:** https://plebly.fund  
+
+Related docs: `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
+
+---
+
+## 1. Purpose and trust model
+
+Plebly is a **public funding surface for Bitcoin work**: proposals live in git, sats sit at **on-chain escrow addresses**, builders claim exclusivity with a bond, and reviewers / keyholders execute outcomes under published rules.
+
+**What the platform does**
+
+- Host the site and Workers API (auth, claims, fees, Lightning claimer, ballots).
+- Open GitHub PRs into `Plebly/proposals` (GitHub App).
+- Verify fees/bonds and escrow balances via public mempool APIs.
+- Index contributions and enforce claim-abuse / funding-window rules in KV + cron.
+
+**What the platform does not do**
+
+- Hold production multisig keys or auto-spend escrow (Workers never sign releases).
+- Replace git as the canonical proposal record.
+- Confiscate unclaimed refunds or take a fee on refunds (Q17).
+
+**Residual trust (v1):** 3-of-5 keyholders can stall after reviewer approval; there is no on-chain timelock. Ops runbook + site stall banner (`/escrow/stall`). Documented in PARAMETERS (Q21).
+
+---
+
+## 2. Repository layout
+
+Three git repos (no monorepo):
+
+| Path | Repo | Role |
+|------|------|------|
+| `workers/` | [Plebly/workers](https://github.com/Plebly/workers) | Cloudflare Worker API + cron |
+| `plebly.fund/` | [Plebly/plebly.fund](https://github.com/Plebly/plebly.fund) | Static SPA (Vite → GitHub Pages) |
+| `proposals/` | [Plebly/proposals](https://github.com/Plebly/proposals) | Canonical proposals, schema, CI, parameters |
+| `docs/` | *(local / not a git root)* | Design + this document |
+
+Proposal markdown lives under `proposals/proposals/{unindexed,listed,claimed,completed,declined}/`.
+
+---
+
+## 3. High-level architecture
+
+```mermaid
+flowchart TB
+  User[Browser plebly.fund]
+  API[Cloudflare Worker plebly-api]
+  GH[GitHub Plebly/proposals]
+  MP[Mempool API signet/mainnet]
+  BZ[Boltz API LN]
+  KV[(KV: USERS CONTRIBUTIONS SESSIONS SWAPS)]
+  R2[(R2: MEDIA)]
+
+  User -->|OAuth session Bearer / cookie| API
+  User -->|raw + Contents API list| GH
+  User -->|address balances| MP
+  API -->|GitHub App PRs| GH
+  API -->|fee/bond/escrow verify| MP
+  API -->|reverse swaps| BZ
+  API --> KV
+  API --> R2
+  Cron[Worker cron every minute] --> API
+```
+
+**Data authority**
+
+| Concern | Source of truth |
+|---------|-----------------|
+| Proposal text + status | Git on `main` in `Plebly/proposals` |
+| Balances / fee txs | Bitcoin chain via mempool.space |
+| Sessions, ledgers, pending claims, ballots | Worker KV |
+| Covers | R2 |
+
+---
+
+## 4. Runtime configuration (deployed)
+
+### Workers (`workers/wrangler.toml`)
+
+| Binding / var | Value / meaning |
+|---------------|-----------------|
+| `BITCOIN_NETWORK` | `signet` |
+| `MEMPOOL_API` | `https://mempool.space/signet/api` |
+| `PROPOSALS_REPO` | `Plebly/proposals` |
+| `FRONTEND_ORIGIN` | `https://plebly.fund` |
+| `TEST_ESCROW_ADDRESS` | Shared signet receive (smoke / test) |
+| `TEST_SUBMISSION_FEE_ADDRESS` | Fee/bond receive on signet |
+| KV | `USERS`, `CONTRIBUTIONS`, `SESSIONS`, `SWAPS` |
+| R2 | `MEDIA` → `plebly-media` |
+| Cron | `* * * * *` |
+
+**Secrets (not in git):** `SESSION_SECRET`, `HOOK_SECRET`, GitHub OAuth + App, optional X, mainnet `SUBMISSION_FEE_ADDRESS` / `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP`.
+
+### Frontend (`plebly.fund/src/config.ts` + Pages CI)
+
+- `VITE_WORKERS_API` → Workers URL above  
+- `VITE_BITCOIN_NETWORK=signet`  
+- Proposals loaded from GitHub raw + Contents API  
+
+---
+
+## 5. Authentication and authorization
+
+### End-user session
+
+1. **GitHub OAuth** (`GET /auth/github` → callback) creates session user `github:{id}`.
+2. **Nostr** (`/auth/nostr/challenge` + `POST /auth/nostr`) creates `nostr:{pubkey}`.
+3. Session is a **JWT** (HS256, 7d) signed with `SESSION_SECRET` (`lib/session.ts`).
+4. Delivered as `HttpOnly` cookie and/or `Authorization: Bearer` (hash handoff `#plebly_auth=` for cross-origin).
+5. Profile stored at `user:{userId}`; optional public username `uname:{username}` → `/u/{username}`.
+
+**X OAuth:** stubbed (`GET /auth/x` → 501).
+
+### Ops hooks (`HOOK_SECRET`)
+
+Header: `X-Plebly-Hook-Secret`. **Must not** reuse `SESSION_SECRET`. Fails closed if unset.
+
+Used for: `/escrow/allocate`, `/escrow/stall`, `/claims/outcome`, `/claims/challenge/accept`, `/claims/bonds/refundable`, `/ballots/open`, `/ballots/:id/tally`, `/refunds/proposal/:id`.
+
+### GitHub App
+
+Installation token opens PRs into `Plebly/proposals` (propose, claim, reopen, allocate patch, ballots, deliverables). Requires Pull requests (+ Issues for PR comments).
+
+---
+
+## 6. Proposal lifecycle
+
+### Status vocabulary (schema)
+
+`pr_open` → `unindexed` → `listed` | `declined` | `declined_fundable` → `funding` / `claimable` → `claimed` → `in_review` → `completed` | `rejected`  
+
+Also: `underfunded`, `abandoned_vote`, `refunding`, `redirected`.
+
+### Folders (on disk)
+
+```
+proposals/proposals/
+  unindexed/   # after site/direct PR merge path
+  listed/      # fundable (demo smoke bounty lives here)
+  claimed/
+  completed/
+  declined/
+```
+
+**Worker claimable set:** `listed` | `funding` | `claimable`  
+**Taken set:** `claimed` | `in_review` | `rejected`
+
+### Site propose
+
+`POST /proposals/submit` (session):
+
+1. Exact **10k** submission fee to fee address (`verifyExactPayment`, mark `paytxid:`).
+2. Optional cover must already exist in R2.
+3. `target_sats ≥ 1M` requires milestones.
+4. Opens PR into `proposals/unindexed/…` with proposer identity from profile.
+
+### Escrow allocate (hook)
+
+`POST /escrow/allocate` `{ proposal_id, status: listed|declined_fundable, patch_proposal? }`:
+
+| Network | Behavior |
+|---------|----------|
+| **Signet** | Returns `TEST_ESCROW_ADDRESS`, index `0`, writes `escrow_allocated_at` + `funding_window_ends_at` (+180d); optional PR patch (default on) |
+| **Mainnet** | Requires `ESCROW_DESCRIPTOR` + address in `ESCROW_ADDRESS_MAP` for next `escrow:next_index`; else **501** |
+
+Does not derive addresses in-Worker from the descriptor yet — Sparrow-precomputed map is the writer companion to KV index.
+
+---
+
+## 7. Funding and donations
+
+### On-chain
+
+- Escrow address in proposal frontmatter.
+- Site shows **confirmed** address balance (mempool).
+- Claim floor: **100,000 sats** confirmed.
+- Funding bar: green to floor; overfund styling beyond floor.
+- Optional `target_sats` is display-only for claim eligibility.
+
+### Lightning (Boltz reverse swap)
+
+- Enabled automatically on mainnet/testnet; **off on signet** unless `LIGHTNING_ENABLED=true`.
+- UI gated by `lightningUiAllowed()` (signet hidden unless Vite flags).
+- `POST /lightning/invoice` verifies proposal escrow, creates reverse swap, stores encrypted secrets in `SWAPS`.
+- Cron claimer broadcasts claim into escrow; floor still uses on-chain confirmed balance only.
+- Mainnet prefers confirmed lockup before claim broadcast; signet allows mempool claim for speed.
+- Contributions upgraded to confirmed at **≥3** confs (`FUNDING_CONFIRMATIONS`).
+
+### Contribution index
+
+KV key **`contrib:{proposalId}`** only (canonical).
+
+Entry shape (conceptual):
+
+```json
+{
+  "txid": "...", "vout": 0,
+  "swap_id": "...",
+  "amount_sats": 21000,
+  "confirmed": true,
+  "confirmations": 3,
+  "user_id": "github:…",
+  "identity": "…",
+  "rail": "onchain|lightning",
+  "refund_address": "…"
+}
+```
+
+- Cron indexes watched escrow addresses (`escrowwatch:index`).
+- `POST /contributions/record` — verify outpoint pays escrow.
+- `POST /contributions/claim` — bind outpoint/swap to session (required for strict challenge / 1p1v).
+
+---
+
+## 8. Builder claims (critical path)
+
+### Product rules (enforced)
+
+1. **Site slot** = pending KV + `registerActiveClaim` / `claimactive:` when claim PR opens (not at merge).
+2. **90-day window** starts when `claimed_at` is set from claim PR **`merged_at`** only (cron `syncClaimAcceptedAt`).
+3. Bond/fee **spent at verify** (`paytxid:`) — burned even if PR never merges.
+
+### Open claim (`POST /claims/`)
+
+1. Session; not suspended; max **1** active claim; reclaim cooldown; global **10** site claims/day.
+2. Exact bond (10k or 2× after abuse threshold) to fee address.
+3. Confirmed escrow ≥ claim floor; status open.
+4. Milestones grace: if balance ≥ 1M, empty milestones, and `milestones_due_at` passed → reject.
+5. CAS pending `claim:{id}` (TTL **72h**).
+6. Mark bond spent; open PR → `status: claimed`, `claim_opened_at`, `claimed_at: null`, path toward `proposals/claimed/`.
+7. Set `claimactive:{id}`, `claimowner:{id}`, ledger bond `locked`.
+
+### Checkpoint
+
+- Due day **45** from `claimed_at`, grace **+7** days.
+- `POST /claims/checkpoint` — HTTPS only, SSRF blocklist, required HEAD/GET 2xx/3xx; stores `checked_at`.
+
+### Cron enforcement (`processBuilderClaimLifecycle`)
+
+- Sync `claimed_at` from merged PR.
+- Past window → `expired`, forfeit bond, reopen.
+- Missed checkpoint after grace (while `claimed`) → `abandoned`, forfeit, reopen.
+- **GET `/claims/:id`** only syncs accept timestamp (backup); does not own reopen side-effects.
+
+### Reopen guards (`openClaimReopenPullRequest`)
+
+| Situation | Action |
+|-----------|--------|
+| Open unmerged claim PR | Comment + close; clear KV; **no** move PR |
+| Status `in_review` | Set `claimreopen_needs_human:`; no auto PR |
+| Taken on main | PR to `listed/` + `claimable`, clear exclusivity fields; never auto-merge |
+| Dedupe | `claimreopen:{id}` TTL 30d |
+
+### Outcomes
+
+- Hook `POST /claims/outcome` `{ proposal_id, completed|rejected }` — owner from `claimowner:`.
+- Completed → bond `refundable` + ops index; rejected/expired/abandoned → cooldown 30d.
+- Challenge: contributor opens PR; hook `POST /claims/challenge/accept` forfeits + reopen.
+
+### Delete account
+
+Removes profile, username, watches, pending-user index; **retains** `claimledger:{userId}` tombstone. Orphan `claimowner:` / `claimactive:` cleared by lifecycle cron.
+
+---
+
+## 9. Fees and anti-replay
+
+Implemented in `workers/src/lib/fee-payment.ts`.
+
+| Rule | Signet | Mainnet |
+|------|--------|---------|
+| Exact sats to fee address | Required | Required |
+| Confirmation | Unconfirmed OK | Must be confirmed |
+| Address missing | Fail closed | Fail closed |
+| Replay | `paytxid:{txid}` (+ legacy `bondtxid:`) | Same |
+
+Purposes: `submission_fee` | `claim_bond` (cross-purpose: one txid cannot pay both).
+
+CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_ADDRESS` is set (warns + skips if unset — **branch protection must require the Completeness check** or direct-git bypasses).
+
+---
+
+## 10. Funding windows, milestones, ballots, refunds
+
+### Funding window (Q5)
+
+- Frontmatter: `escrow_allocated_at`, `funding_window_ends_at` (180d).
+- Cron: window ended and balance &lt; floor → PR status `underfunded`.
+- UI: days-remaining banner on project page.
+
+### Milestones (Q12)
+
+- Listing/submit: `target_sats ≥ 1M` requires milestones (schema + Worker).
+- Mid-flight: balance ≥ 1M and empty milestones → PR sets `milestones_due_at` (+30d).
+- After grace: claim create + outcome hooks blocked; site banner.
+
+### Ballots (Q18 / Q54)
+
+- Idle **365d** claimable → open ballot + status `abandoned_vote`.
+- Options: `extend` | `refund` | `redirect:<proposal_id>` (≤3 noms).
+- Voting: one identity-linked contributor with **≥3 confs** = one vote.
+- Tally (hook): plurality; quorum = majority of distinct contributors (or all if &lt;3).
+- Decision artifact PR under `decisions/`.
+
+### Refunds (Q17)
+
+- Contributors register refund address on indexed outpoint (`POST /refunds/register`).
+- Ops list via hook. Dust / batch rules are policy for keyholders; **no platform fee** on refunds.
+- Automated batch payouts are **not** Worker-implemented.
+
+### Keyholder stall (Q21)
+
+- Hook sets KV `release_blocked:{id}`; site banner.
+- Runbook: `proposals/docs/keyholder-stall-runbook.md`.
+
+---
+
+## 11. Frontend surface
+
+SPA routes (`plebly.fund/src/router.ts`):
+
+| Path | Behavior |
+|------|----------|
+| `/` | Listed/claimed/completed cards; balances from mempool |
+| `/propose` | Fee-pay wizard + submit |
+| `/proposal/{status}/{slug}` | Detail: byline, funding bar, milestones rail, build/donate, ballots/refunds when status fits |
+| `/u/:username` | Public profile |
+| `/account` | Profile, watching, claims, proposals |
+| `/about` | Beliefs, parameters, residual trust |
+
+Proposals are **read from GitHub**; mutations go through Workers → PRs. Nested frontmatter (`proposer`, `milestones`) parsed in `src/frontmatter.ts`.
+
+---
+
+## 12. Worker API catalog (summary)
+
+| Auth | Routes |
+|------|--------|
+| Public | `/health`, proposal claim status, contrib list, LN status/swap poll, ballot get, stall get, media get, public profile |
+| Session | propose, claim, checkpoint, challenge open, watch, profile CRUD, contrib claim, ballot vote, refund register, media upload, deliverable |
+| HOOK_SECRET | allocate, stall, outcome, challenge accept, refundable bonds, ballot open/tally, refunds list |
+
+Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf upgrade → escrow contrib index → funding windows / milestones / idle ballots.
+
+---
+
+## 13. KV / R2 key patterns (operational)
+
+**USERS:** `user:`, `uname:`, `watch:`, `paytxid:`, `bondtxid:`, `claim:`, `claimpendinguser:`, `claimactive:` + `claimactive:index`, `claimowner:`, `claimledger:`, `claimrate:`, `claimchallenge:`, `claimreopen:`, `claimreopen_needs_human:`, `bondrefundable:index`, `escrow:next_index`, `escrowwatch:index`, `release_blocked:`, `ballot:`, `ballotopen:`, `mediaupload:`  
+
+**CONTRIBUTIONS:** `contrib:{proposalId}`  
+
+**SESSIONS:** Nostr challenges only (`nostr:chal:`) — JWTs are not stored in KV  
+
+**SWAPS:** `lnswap:`, `lnswap:index`, `lnclaimlock:`  
+
+**R2:** `covers/{userId}/{uuid}.{ext}`  
+
+---
+
+## 14. Live parameters (code + PARAMETERS.md)
+
+| Parameter | Live value |
+|-----------|------------|
+| Submission fee / claim bond | 10,000 sats exact |
+| Claim floor | 100,000 sats confirmed |
+| Claim window | 90 days from `claimed_at` |
+| Checkpoint | day 45 + 7d grace |
+| Pending TTL | 72 hours |
+| Reclaim cooldown | 30 days |
+| Max active claims | 1 |
+| Site claim PRs / day | 10 |
+| Abuse escalation | 2 failures → 2× bond |
+| Milestone threshold | 1,000,000 sats |
+| Funding window | 180 days from allocate |
+| Idle → ballot | 365 days |
+| Vote / funding confirmations | 3 |
+| Platform fee | 2.5% at successful disbursement (policy; not auto-taken by Worker) |
+| Network | **signet** |
+
+---
+
+## 15. Testing
+
+| Tier | Command | Risk |
+|------|---------|------|
+| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~89 tests) |
+| Frontend unit | `cd plebly.fund && npm test` | None |
+| Proposal schema + fee helpers | `cd proposals && npm run validate:all && npm test` | None |
+| Live read-only smoke | `cd workers && npm run smoke:signet` | None |
+| Opt-in spend | Manual Sparrow on **your** signet addresses | Signet sats |
+
+Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, escrow allocate.
+
+---
+
+## 16. Explicit gaps / TBD (do not assume done)
+
+| Gap | Notes |
+|-----|-------|
+| KEYHOLDERS production xpubs / descriptor | `KEYHOLDERS.md` TBD; mainnet allocate 501 |
+| Mainnet fee address in PARAMETERS | Still `TBD`; use env + CI repo var |
+| Descriptor → address derivation in Worker | Uses `ESCROW_ADDRESS_MAP` JSON, not online derive |
+| Multisig release automation | Human keyholders + runbooks |
+| X OAuth | 501 |
+| Lightning on default signet deploy | Off |
+| Ops suspend of other users | Self-only today |
+| Automated refund batching | Register only |
+| Branch-protection on Completeness | Required ops step or fee CI is skippable |
+
+---
+
+## 17. Typical end-to-end paths (as built)
+
+### A. List and fund a bounty (signet)
+
+1. Pay 10k fee → submit on site → PR to `unindexed/` → review merge to `listed/` with escrow.
+2. Hook allocate (or manual FM) sets address + funding window.
+3. Donors send signet sats (and/or LN if enabled); balance updates on site.
+4. At ≥100k confirmed, project is open to claim.
+
+### B. Claim and deliver
+
+1. Builder pays bond → site opens claim PR → slot held in KV.
+2. Reviewer merges → cron sets `claimed_at` from `merged_at`.
+3. Checkpoint by day 45 (+grace); deliverable PR → `in_review` → `completed`.
+4. Hook outcome `completed` → bond refundable for keyholder batch.
+
+### C. Failure / abandon
+
+1. Window or checkpoint miss → cron forfeits bond, reopen to `claimable`.
+2. Or contributor challenge → accept hook → same reopen path.
+3. Idle 365d / underfunded window → ballot → extend / refund / redirect.
+
+---
+
+## 18. File map (implementation entrypoints)
+
+| Area | Primary paths |
+|------|----------------|
+| Worker entry + cron | `workers/src/index.ts` |
+| Fee/bond | `workers/src/lib/fee-payment.ts` |
+| Claims | `workers/src/lib/builder-claim.ts`, `claim-lifecycle.ts`, `claim-abuse.ts`, `routes/claims.ts` |
+| Contrib / ballots / refunds | `lib/contrib.ts`, `lib/ballots.ts`, `routes/contributions.ts`, `routes/ballots.ts`, `routes/refunds.ts` |
+| Escrow | `lib/escrow-allocate.ts`, `routes/escrow.ts` |
+| LN | `lib/claimer.ts`, `lib/boltz.ts`, `routes/lightning.ts` |
+| Frontend | `plebly.fund/src/{main,router,proposal-page,builder-panel,fee-pay,github,frontmatter}.ts` |
+| Schema / CI | `proposals/schema/proposal.schema.json`, `.github/workflows/completeness.yml` |
+| Parameters | `proposals/PARAMETERS.md`, `workers/src/lib/claim-params.ts` |
+
+---
+
+*End of as-implemented description. When behavior changes, update this file in the same PR as the code.*
