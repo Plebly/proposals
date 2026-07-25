@@ -7,8 +7,11 @@ End-to-end checklist without multisig or mainnet.
 | Tier | Command | Risk |
 |------|---------|------|
 | 0–1 unit + mocked API | `cd workers && npm test` | None — no broadcast, no live mempool writes |
+| Frontend unit | `cd plebly.fund && npm test` | None |
+| Proposal schema + fee helpers | `cd proposals && npm run validate:all && npm test` | None |
 | 2 read-only live | `cd workers && npm run smoke:signet` | None — health + observe demo balance only |
-| Proposal schema | `cd proposals && npm run validate:all` | None |
+
+Workers suite covers critical workflows: `HOOK_SECRET` hooks, exact fee/bond + `paytxid` anti-replay, durable `claimactive`, pending CAS, claim reopen/`claimed_at` sync, contrib identity + ballot 1p1v, FUNDABLE status, checkpoint SSRF, delete-account ledger retention, escrow allocate.
 
 **Do not fund** the public BIP39 test-vector address `tb1qacjkk…` unless you control that key. Point `TEST_ESCROW_ADDRESS` / demo `escrow_address` at **your** wallet before any opt-in spend.
 

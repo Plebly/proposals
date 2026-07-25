@@ -5,7 +5,8 @@
   "scripts": {
     "validate": "node scripts/validate-proposal.mjs",
     "validate:all": "node scripts/validate-proposal.mjs --all",
-    "check:fees": "node scripts/check-fee-payments.mjs"
+    "check:fees": "node scripts/check-fee-payments.mjs",
+    "test": "node --test scripts/check-fee-payments.test.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",
