@@ -61,10 +61,12 @@ Temporary claim suspension may be set for: bond fraud, fee/bond txid replay, or 
 
 | Role | Address / descriptor |
 |------|----------------------|
-| Submission fee | `TBD` |
+| Submission fee | `TBD` (mainnet) — signet CI/testing uses `tb1qacjkkdgkrm7fc50kws0740cdcnw78xynxgn8p5` via repo var / `TEST_SUBMISSION_FEE_ADDRESS` |
 | Platform ops (fee receive) | `TBD` |
 | Claim bond receive | Same as submission fee unless published separately |
 | Escrow receive descriptor template | See `KEYHOLDERS.md` |
+
+Publish mainnet fee address here, then set Worker `SUBMISSION_FEE_ADDRESS` + GitHub `vars.SUBMISSION_FEE_ADDRESS` (see [`docs/mainnet-launch-ops.md`](docs/mainnet-launch-ops.md) §A).
 
 ## Network
 

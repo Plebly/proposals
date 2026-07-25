@@ -16,9 +16,11 @@ Non-responses count as abstentions. Abstentions never satisfy `need_yes`. Bootst
 
 **Conflicts / abuse:** The fulfiller is excluded from voting and from the roster for their own proposal’s decision. Bootstrap seats cannot be removed by funder vote. Removal eligibility requires ≥10,000 sats confirmed in the prior 12 months (dust sybil resistance).
 
-## Bootstrap roster (TBD)
+## Bootstrap roster (TBD — not yet seeded)
 
 Five named seats until **ten** platform completions; bootstrap seats retained permanently afterward.
+
+**Status:** KV roster is empty until ops runs [`scripts/bootstrap-reviewers.sh`](scripts/bootstrap-reviewers.sh) with exactly five final user ids (`HOOK_SECRET` required). Seats are permanent — do not seed until the five are chosen. Procedure: [`docs/mainnet-launch-ops.md`](docs/mainnet-launch-ops.md) §C. Then fill this table and merge.
 
 | Identity | Proof / track record | Seated |
 |----------|----------------------|--------|

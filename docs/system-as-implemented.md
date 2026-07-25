@@ -378,7 +378,7 @@ Implemented in `workers/src/lib/fee-payment.ts`.
 
 Purposes: `submission_fee` | `claim_bond` (cross-purpose: one txid cannot pay both).
 
-CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_ADDRESS` is set (warns + skips if unset — **branch protection must require the Completeness check** or direct-git bypasses).
+CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_ADDRESS` is set (warns + skips if unset). **Ops:** set the var and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
 
 ---
 
@@ -426,13 +426,13 @@ SPA routes (`plebly.fund/src/router.ts`):
 | `/` | Listed/claimed/completed cards; balances from mempool |
 | `/propose` | Create: fee-pay + narrative + milestones + depends_on + related_work |
 | `/propose?edit={path}` | Amend prefill (on-main, pre-claim, proposer only) → `POST /proposals/update` |
-| `/proposal/{status}/{slug}` | Detail: byline, **Edit** CTA when eligible, depends_on / related_work, milestones rail (+ intra-deps), funding bar, build/donate, **reviewer decision** (in_review), **rebuttal** (rejected), ballots/refunds |
-| `/reviewers` | Governance: roster, open decisions, removal ballots (funder vote / open) |
+| `/proposal/{status}/{slug}` | Detail: quiet hero meta (by · date · id · Edit); slim funding strip; narrative first then milestones + **Context** (depends_on / related_work); sticky sidebar **Build + Donate**; on-chain behind disclosure; **reviewer decision** (`in_review`), **rebuttal** (`rejected`), ballots/refunds when status fits |
+| `/reviewers` | Governance: roster, open decisions, removal ballots (funder vote / open) — linked from footer + About, not top nav |
 | `/u/:username` | Public profile (+ reviewer badge when seated) |
 | `/account` | Profile, watching, claims (+ history), proposals; reviewer / funder links |
-| `/about` | Beliefs, parameters, residual trust |
+| `/about` | Beliefs, how-it-works, **Reviewers** governance section, parameters, residual trust, get involved |
 
-Login: nav **Log in** menu offers **GitHub** and **X** (Nostr also available via API/auth routes). Deliverable submit shows **AI first-pass** card inline. **Reviewers** lives in the footer and on About (not top nav).
+Login: nav **Log in** menu offers **GitHub** and **X** (Nostr also available via API/auth routes). Top nav: Projects · Start a project · About (+ auth). Deliverable submit shows **AI first-pass** card inline. Footer: Explore (incl. Reviewers) · Source · Follow.
 
 Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutations go through Workers → PRs. Nested frontmatter parsed in `src/frontmatter.ts` (SPA) and `workers/src/lib/yaml-fm.ts` (API).
 
@@ -496,7 +496,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Tier | Command | Risk |
 |------|---------|------|
 | Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~166 tests) |
-| Frontend unit | `cd plebly.fund && npm test` | None (~35 tests) |
+| Frontend unit | `cd plebly.fund && npm test` | None (~45 tests) |
 | Proposal schema + fee helpers | `cd proposals && npm run validate:all && npm test` | None |
 | Live read-only smoke | `cd workers && npm run smoke:signet` | None |
 | Opt-in spend | Manual Sparrow on **your** signet addresses | Signet sats |
@@ -507,19 +507,21 @@ Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle,
 
 ## 16. Explicit gaps / TBD (do not assume done)
 
+Launch ops runbook: [`docs/mainnet-launch-ops.md`](mainnet-launch-ops.md).
+
 | Gap | Notes |
 |-----|-------|
-| KEYHOLDERS production xpubs / descriptor | `KEYHOLDERS.md` TBD; mainnet allocate 501 |
-| Mainnet fee address in PARAMETERS | Still `TBD`; use env + CI repo var |
-| Descriptor → address derivation in Worker | Uses `ESCROW_ADDRESS_MAP` JSON, not online derive |
-| Multisig release automation | Human keyholders + runbooks |
-| Bootstrap reviewer identities | Seed via `/reviewers/bootstrap` + publish in `REVIEWERS.md` |
+| KEYHOLDERS production xpubs / descriptor | Still TBD in `KEYHOLDERS.md`; mainnet allocate 501 until `ESCROW_DESCRIPTOR` + `ESCROW_ADDRESS_MAP` secrets set |
+| Mainnet fee address in PARAMETERS | Mainnet still `TBD`; **signet** CI var `SUBMISSION_FEE_ADDRESS` is set; flip to mainnet address before launch |
+| Descriptor → address derivation in Worker | **v1 deferred** — Sparrow-precomputed `ESCROW_ADDRESS_MAP` only |
+| Multisig release automation | Human keyholders + runbooks (intentional) |
+| Bootstrap reviewer identities | **Not seeded** — `scripts/bootstrap-reviewers.sh` + mirror `REVIEWERS.md` (exactly five final ids; seats permanent) |
 | Anthropic key in production | Set `ANTHROPIC_API_KEY`; without it AI → ambiguous |
 | X OAuth credentials | Wired; needs portal app + secrets |
-| Lightning on default signet deploy | Off |
+| Lightning on default signet deploy | **Off by design** — auto-on mainnet/testnet; signet needs `LIGHTNING_ENABLED=true` |
 | Ops suspend of other users | Self-only today |
-| Automated refund batching | Register only |
-| Branch-protection on Completeness | Required ops step or fee CI is skippable |
+| Automated refund batching | **v1 deferred** — register + keyholder batch only |
+| Branch-protection on Completeness | **`validate` required on `main`** (enforce_admins); keep `vars.SUBMISSION_FEE_ADDRESS` set or fee gate still skips |
 
 ---
 
@@ -563,8 +565,9 @@ Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle,
 | Propose / amend | `workers/src/routes/proposals.ts`, `lib/yaml-fm.ts`, `lib/proposal-deps.ts`, `lib/proposer-match.ts` |
 | Frontend | `plebly.fund/src/{main,router,propose-page,propose-milestones,propose-deps,proposal-page,proposal-ui,builder-panel,review-panel,governance-page,reviewers,fee-pay,github,frontmatter}.ts` |
 | Schema / CI | `proposals/schema/proposal.schema.json`, `template/proposal.md`, `.github/workflows/completeness.yml` |
+| Launch ops | `proposals/docs/mainnet-launch-ops.md`, `proposals/scripts/bootstrap-reviewers.sh` |
 | AI prompts | `proposals/review-prompts/v1.md` |
-| Parameters | `proposals/PARAMETERS.md`, `proposals/REVIEWERS.md`, `workers/src/lib/claim-params.ts`, `reviewer-params.ts` |
+| Parameters | `proposals/PARAMETERS.md`, `proposals/REVIEWERS.md`, `proposals/KEYHOLDERS.md`, `workers/src/lib/claim-params.ts`, `reviewer-params.ts` |
 
 ---
 
