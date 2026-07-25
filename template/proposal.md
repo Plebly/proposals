@@ -9,6 +9,7 @@ escrow_index: null
 submission_fee_txid: "REPLACE_WITH_TXID"
 cover_image: null
 proposer:
+  username: null
   github: null
   nostr: null
 created_at: "2026-01-01T00:00:00Z"
