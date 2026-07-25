@@ -25,7 +25,7 @@ milestones:
 depends_on: []
 related_work:
   - label: "Bitcoin Commons spam filter (blvm-protocol)"
-    url: "https://github.com/bitcoin-commons/blvm-protocol"
+    url: "https://github.com/BTCDecoded/blvm-protocol"
   - label: "Bitcoin Knots"
     url: "https://github.com/bitcoinknots/bitcoin"
   - label: "Core datacarrier discussion"
