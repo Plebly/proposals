@@ -22,8 +22,8 @@ related_work:
     url: "https://github.com/bitcoinknots/bitcoin"
   - label: "Knots policy.cpp (current standardness checks)"
     url: "https://github.com/bitcoinknots/bitcoin/blob/master/src/policy/policy.cpp"
-escrow_address: null
-escrow_index: null
+escrow_address: "tb1qf8agl2750ezeuwt7ys5ghzmul9wutls0cs9jyt"
+escrow_index: 1
 submission_fee_txid: "0000000000000000000000000000000000000000000000000000000000000000"
 proposer:
   username: secsovereign
@@ -64,4 +64,4 @@ Verified against current Knots `src/policy/policy.cpp` / `src/init.cpp`: no exis
 
 ## Notes
 
-`submission_fee_txid` is the signet seed placeholder (all zeros) until a real 10k fee payment is attached. Escrow address allocated when funded.
+`submission_fee_txid` is the signet seed placeholder (all zeros) until a real 10k fee payment is attached. Escrow is a Sparrow signet receive address (index 1) controlled by the operator.
