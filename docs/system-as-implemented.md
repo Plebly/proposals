@@ -125,7 +125,7 @@ Used for: `/escrow/allocate`, `/escrow/stall`, `/claims/outcome`, `/claims/chall
 
 ### GitHub App
 
-Installation token opens PRs into `Plebly/proposals` (propose, claim, reopen, allocate patch, ballots, deliverables, dissent, rebuttal, AI fail notes). Requires Pull requests (+ Issues for PR comments).
+Installation token opens PRs into `Plebly/proposals` (propose, **amend**, claim, reopen, allocate patch, ballots, deliverables, dissent, rebuttal, AI fail notes). Requires Pull requests (+ Issues for PR comments).
 
 ---
 
@@ -151,14 +151,38 @@ proposals/proposals/
 **Worker claimable set:** `listed` | `funding` | `claimable`  
 **Taken set:** `claimed` | `in_review` | `rejected`
 
-### Site propose
+### Site propose (create)
 
-`POST /proposals/submit` (session):
+`POST /proposals/submit` (session) — SPA `/propose`:
 
 1. Exact **10k** submission fee to fee address (`verifyExactPayment`, mark `paytxid:`).
 2. Optional cover must already exist in R2.
-3. `target_sats ≥ 1M` requires milestones.
-4. Opens PR into `proposals/unindexed/…` with proposer identity from profile.
+3. Author fields: title, problem, deliverable, verification, out of scope, optional notes, optional `target_sats`, milestones, `depends_on`, `related_work`.
+4. `target_sats ≥ 1M` requires ≥1 milestone (Q12).
+5. Stamps `proposer: { github, username, nostr, x }` from profile.
+6. Opens PR into `proposals/unindexed/…` (**branch only until merge** — not editable in-app while `pr_open`).
+
+### Site amend (edit)
+
+`POST /proposals/update` (session) — SPA `/propose?edit={repoPath}` or **Edit proposal** on the project page:
+
+1. File must exist on **`main`** (`fetchProposalRaw`).
+2. Status ∈ `unindexed` | `listed` | `funding` | `underfunded` | `claimable` | `declined_fundable` (pre-claim only).
+3. Session must match frontmatter `proposer` (username | github | x | nostr).
+4. No second submission fee. Opens `amend/*` PR via `openProposalUpdatePullRequest`, preserving lifecycle fields (status, escrow_*, fee txid, claimer, windows, `proposer`, `created_at`, `id`).
+5. Concurrent amends are allowed (same pattern as other update PRs); merge/close stale amend PRs in review.
+
+Worker frontmatter parse/serialize supports nested YAML (`lib/yaml-fm.ts`) so listed files with multi-line `proposer` / `milestones` round-trip correctly.
+
+### Proposal dependency fields (frontmatter)
+
+| Field | Meaning |
+|-------|---------|
+| `depends_on[]` | **Blocking** deps: `{ kind: plebly\|external, label, ref?, note? }` — other initiatives this work needs |
+| `related_work[]` | **Non-blocking** prior art: `{ label, url (https), note? }` |
+| `milestones[].dependencies` | Q11: prior **milestone ids** in the same file (`m1`, …) |
+
+Schema: `proposals/schema/proposal.schema.json`. Template defaults empty arrays.
 
 ### Escrow allocate (hook)
 
@@ -400,16 +424,17 @@ SPA routes (`plebly.fund/src/router.ts`):
 | Path | Behavior |
 |------|----------|
 | `/` | Listed/claimed/completed cards; balances from mempool |
-| `/propose` | Fee-pay wizard + submit |
-| `/proposal/{status}/{slug}` | Detail: byline, funding bar, milestones rail, build/donate, **reviewer decision** (in_review), **rebuttal** (rejected), ballots/refunds when status fits |
-| `/reviewers` | Governance: active roster, open decisions (vote if reviewer), open/vote/open removal ballots (if eligible funder) |
+| `/propose` | Create: fee-pay + narrative + milestones + depends_on + related_work |
+| `/propose?edit={path}` | Amend prefill (on-main, pre-claim, proposer only) → `POST /proposals/update` |
+| `/proposal/{status}/{slug}` | Detail: byline, **Edit** CTA when eligible, depends_on / related_work, milestones rail (+ intra-deps), funding bar, build/donate, **reviewer decision** (in_review), **rebuttal** (rejected), ballots/refunds |
+| `/reviewers` | Governance: roster, open decisions, removal ballots (funder vote / open) |
 | `/u/:username` | Public profile (+ reviewer badge when seated) |
-| `/account` | Profile, watching, claims (+ history), proposals; reviewer / funder status links into `/reviewers` |
+| `/account` | Profile, watching, claims (+ history), proposals; reviewer / funder links |
 | `/about` | Beliefs, parameters, residual trust |
 
-Login: nav **Log in** menu offers GitHub and X. Deliverable submit shows **AI first-pass** card (pass/fail/ambiguous) inline. Nav includes **Reviewers**.
+Login: nav **Log in** menu offers **GitHub** and **X** (Nostr also available via API/auth routes). Deliverable submit shows **AI first-pass** card inline. Nav includes **Reviewers**.
 
-Proposals are **read from GitHub**; mutations go through Workers → PRs. Nested frontmatter (`proposer`, `milestones`) parsed in `src/frontmatter.ts`.
+Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutations go through Workers → PRs. Nested frontmatter parsed in `src/frontmatter.ts` (SPA) and `workers/src/lib/yaml-fm.ts` (API).
 
 ---
 
@@ -418,7 +443,7 @@ Proposals are **read from GitHub**; mutations go through Workers → PRs. Nested
 | Auth | Routes |
 |------|--------|
 | Public | `/health`, proposal claim status, contrib list, LN status/swap poll, ballot get, stall get, media get, public profile, reviewer roster / open decisions / open removals / decision get |
-| Session | propose, claim, checkpoint, challenge open, rebuttal, watch, profile CRUD, contrib claim, ballot vote, refund register, media upload, deliverable, reviewer vote/dissent, removal open/vote |
+| Session | **propose submit + amend**, claim, checkpoint, challenge open, rebuttal, watch, profile CRUD, contrib claim, ballot vote, refund register, media upload, deliverable, reviewer vote/dissent, removal open/vote |
 | HOOK_SECRET | allocate, stall, outcome, challenge accept, refundable bonds, ballot open/tally, refunds list, reviewer bootstrap, decision open/tally, removal tally |
 
 Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf upgrade → escrow contrib index → funding windows / milestones / idle ballots.
@@ -470,13 +495,13 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 
 | Tier | Command | Risk |
 |------|---------|------|
-| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~153 tests) |
-| Frontend unit | `cd plebly.fund && npm test` | None |
+| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~166 tests) |
+| Frontend unit | `cd plebly.fund && npm test` | None (~35 tests) |
 | Proposal schema + fee helpers | `cd proposals && npm run validate:all && npm test` | None |
 | Live read-only smoke | `cd workers && npm run smoke:signet` | None |
 | Opt-in spend | Manual Sparrow on **your** signet addresses | Signet sats |
 
-Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility, resolution abuse (self-vote, bootstrap lock, dust sybil, dissent/AI rate limits, approve gate).
+Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility, resolution abuse, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation.
 
 ---
 
@@ -502,10 +527,11 @@ Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle,
 
 ### A. List and fund a bounty (signet)
 
-1. Pay 10k fee → submit on site → PR to `unindexed/` → review merge to `listed/` with escrow.
-2. Hook allocate (or manual FM) sets address + funding window.
-3. Donors send signet sats (and/or LN if enabled); balance updates on site.
-4. At ≥100k confirmed, project is open to claim.
+1. Pay 10k fee → submit on site (milestones / depends_on / related_work as needed) → PR to `unindexed/` → merge to `main`.
+2. After merge, proposer may **Edit** in-app (amend PR) while pre-claim.
+3. Hook allocate (or manual FM) sets address + funding window → `listed` / funding.
+4. Donors send signet sats (and/or LN if enabled); balance updates on site.
+5. At ≥100k confirmed, project is open to claim.
 
 ### B. Claim and deliver
 
@@ -534,8 +560,9 @@ Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle,
 | Escrow | `lib/escrow-allocate.ts`, `routes/escrow.ts` |
 | LN | `lib/claimer.ts`, `lib/boltz.ts`, `routes/lightning.ts` |
 | Auth | `routes/auth.ts` (GitHub, X PKCE, Nostr) |
-| Frontend | `plebly.fund/src/{main,router,proposal-page,builder-panel,review-panel,governance-page,reviewers,fee-pay,github,frontmatter}.ts` |
-| Schema / CI | `proposals/schema/proposal.schema.json`, `.github/workflows/completeness.yml` |
+| Propose / amend | `workers/src/routes/proposals.ts`, `lib/yaml-fm.ts`, `lib/proposal-deps.ts`, `lib/proposer-match.ts` |
+| Frontend | `plebly.fund/src/{main,router,propose-page,propose-milestones,propose-deps,proposal-page,proposal-ui,builder-panel,review-panel,governance-page,reviewers,fee-pay,github,frontmatter}.ts` |
+| Schema / CI | `proposals/schema/proposal.schema.json`, `template/proposal.md`, `.github/workflows/completeness.yml` |
 | AI prompts | `proposals/review-prompts/v1.md` |
 | Parameters | `proposals/PARAMETERS.md`, `proposals/REVIEWERS.md`, `workers/src/lib/claim-params.ts`, `reviewer-params.ts` |
 

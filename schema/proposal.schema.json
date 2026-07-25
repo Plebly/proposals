@@ -32,7 +32,43 @@
           "out_of_scope": { "type": "string" },
           "allocation_sats": { "type": "integer", "minimum": 1 },
           "deadline": { "type": "string", "minLength": 4 },
-          "dependencies": { "type": "array", "items": { "type": "string" } }
+          "dependencies": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Prior milestone ids in this proposal (Q11), e.g. m1"
+          }
+        }
+      }
+    },
+    "depends_on": {
+      "type": "array",
+      "description": "Blocking dependencies on other initiatives (Plebly or external)",
+      "items": {
+        "type": "object",
+        "required": ["kind", "label"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["plebly", "external"] },
+          "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "ref": { "type": "string", "maxLength": 500 },
+          "note": { "type": "string", "maxLength": 2000 }
+        }
+      }
+    },
+    "related_work": {
+      "type": "array",
+      "description": "Non-blocking external work / prior art with links",
+      "items": {
+        "type": "object",
+        "required": ["label", "url"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "url": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 500,
+            "pattern": "^https://"
+          },
+          "note": { "type": "string", "maxLength": 2000 }
         }
       }
     },
@@ -44,7 +80,16 @@
       "maxLength": 64,
       "pattern": "^[0-9a-fA-F]{64}$"
     },
-    "proposer": { "type": "object" },
+    "cover_image": { "type": ["string", "null"] },
+    "proposer": {
+      "type": "object",
+      "properties": {
+        "username": { "type": ["string", "null"] },
+        "github": { "type": ["string", "null"] },
+        "nostr": { "type": ["string", "null"] },
+        "x": { "type": ["string", "null"] }
+      }
+    },
     "created_at": { "type": "string" }
   },
   "allOf": [

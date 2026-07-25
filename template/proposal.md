@@ -3,7 +3,12 @@ id: null
 title: "Short descriptive title"
 status: pr_open
 target_sats: null
+# milestones[].dependencies = prior milestone ids in this file (Q11), e.g. [m1]
 milestones: []
+# Blocking deps on other initiatives (kind: plebly | external)
+depends_on: []
+# Non-blocking prior art / external work (https links)
+related_work: []
 escrow_address: null
 escrow_index: null
 submission_fee_txid: "REPLACE_WITH_TXID"
@@ -12,6 +17,7 @@ proposer:
   username: null
   github: null
   nostr: null
+  x: null
 created_at: "2026-01-01T00:00:00Z"
 ---
 
