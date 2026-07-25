@@ -121,6 +121,11 @@ if (files.length === 0) {
 
 let failed = 0;
 for (const f of files) {
+  if (!fs.existsSync(f)) {
+    // Deletions show up in git diff; nothing to validate.
+    console.log(`SKIP ${path.relative(root, f)} (deleted)`);
+    continue;
+  }
   const { ok, errors } = validateFile(f);
   if (ok) {
     console.log(`PASS ${path.relative(root, f)}`);
