@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "validate": "node scripts/validate-proposal.mjs",
-    "validate:all": "node scripts/validate-proposal.mjs --all"
+    "validate:all": "node scripts/validate-proposal.mjs --all",
+    "check:fees": "node scripts/check-fee-payments.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

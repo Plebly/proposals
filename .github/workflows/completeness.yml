@@ -32,3 +32,24 @@ jobs:
           else
             npm run validate:all
           fi
+      - name: On-chain fee / bond gate
+        if: github.event_name == 'pull_request'
+        env:
+          SUBMISSION_FEE_ADDRESS: ${{ vars.SUBMISSION_FEE_ADDRESS }}
+          MEMPOOL_API: ${{ vars.MEMPOOL_API }}
+          BITCOIN_NETWORK: ${{ vars.BITCOIN_NETWORK }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          mapfile -t files < <(git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -E '^proposals/.+\.md$' || true)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No proposal files for fee gate."
+            exit 0
+          fi
+          if [ -z "${SUBMISSION_FEE_ADDRESS:-}" ]; then
+            echo "::warning::SUBMISSION_FEE_ADDRESS repo variable unset — fee gate skipped. Set vars.SUBMISSION_FEE_ADDRESS and require this workflow as a branch-protection status check."
+            exit 0
+          fi
+          export MEMPOOL_API="${MEMPOOL_API:-https://mempool.space/signet/api}"
+          export BITCOIN_NETWORK="${BITCOIN_NETWORK:-signet}"
+          node scripts/check-fee-payments.mjs "${files[@]}"

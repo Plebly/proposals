@@ -12,7 +12,11 @@ End-to-end checklist without multisig or mainnet.
 
 **Do not fund** the public BIP39 test-vector address `tb1qacjkk…` unless you control that key. Point `TEST_ESCROW_ADDRESS` / demo `escrow_address` at **your** wallet before any opt-in spend.
 
-**Opt-in spend (Tier 3, manual only):** set your addresses, then use Sparrow. Never enable in CI. Signet fee/bond checks are currently stubs (any found tx may pass) — do not treat a successful submit as proving fee integrity. Lightning claimer can broadcast; keep it off on signet unless you intend Boltz **testnet** behavior.
+**Opt-in spend (Tier 3, manual only):** set your addresses, then use Sparrow. Never enable in CI.
+
+**Fee / bond (exact):** Workers and CI require exact sats to `TEST_SUBMISSION_FEE_ADDRESS` / `SUBMISSION_FEE_ADDRESS`. Cross-purpose anti-replay uses KV `paytxid:{txid}` (legacy `bondtxid:` still honored). Bond/fee is **spent at verify** — if a claim PR never merges, the bond is still burned (forfeited). Lightning claimer can broadcast; keep it off on signet unless you intend Boltz **testnet** behavior.
+
+**Ops hooks:** set `HOOK_SECRET` (never reuse `SESSION_SECRET`). Header `X-Plebly-Hook-Secret` for `/escrow/allocate`, `/claims/outcome`, `/claims/bonds/refundable`, ballots open/tally.
 
 ## 1. Your signet wallet
 

@@ -13,19 +13,22 @@ Fixed at first public submission. Changes require a public process and thirty-da
 | Claim window | 90 days from claim acceptance |
 | Claim extension | One 30-day extension via reviewer supermajority |
 
-## Provisional (ratify before launch)
+## Ratified (pre-launch process defaults)
 
-| Parameter | Proposed default |
-|-----------|------------------|
-| Active funding window | 180 days from escrow address allocation |
-| Funding window extension | One 90-day extension via reviewer vote |
-| Idle claimable → contributor ballot | 365 days with no claim |
+| Parameter | Value |
+|-----------|-------|
+| Active funding window (Q5) | 180 days from escrow address allocation |
+| Funding window extension (Q5) | One 90-day extension via reviewer vote |
+| Idle claimable → contributor ballot (Q54) | 365 days with no claim → `abandoned_vote` |
+| Redirect / underfunded ballot (Q18) | Options `extend` \| `refund` \| `redirect:<id>`; 1 claimed contributor identity = 1 vote; quorum = majority of distinct contributors (or all if &lt;3) |
 | Badge: Notable Contributor | 21,000 sats (per proposal) |
 | Badge: Major Contributor | 100,000 sats |
 | Badge: Patron | 1,000,000 sats |
 | Submission fee confirmations | 1 |
 | Funding / badge / vote confirmations | 3 |
 | Completion finality confirmations | 3 |
+
+Fee/bond receive address remains TBD until ops wallet is published (Workers: `SUBMISSION_FEE_ADDRESS` / signet `TEST_SUBMISSION_FEE_ADDRESS`; CI: repo var `SUBMISSION_FEE_ADDRESS`).
 
 ## Claim abuse mitigations (provisional)
 
@@ -71,3 +74,7 @@ Temporary claim suspension may be set for: bond fraud, fee/bond txid replay, or 
 | **Launch** | Mainnet only | 3-of-5 multisig — see `KEYHOLDERS.md` |
 
 Workers default: `BITCOIN_NETWORK=signet`, mempool `https://mempool.space/signet/api`.
+
+## Residual trust (Q21)
+
+v1 escrow has **no on-chain timelock** forcing keyholders to sign. If reviewers approve but keyholders stall, ops follows `docs/keyholder-stall-runbook.md` (7d public log / 14d incident) and may set a site `release_blocked_reason` banner via `/escrow/stall`. Escrow mechanism upgrades require a public process with ≥30-day notice.

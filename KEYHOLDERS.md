@@ -24,9 +24,11 @@ Switch to the production block below before launch.
 
 ---
 
-# Production keyholders (mainnet — TBD)
+# Production keyholders (mainnet — fill before first public submission)
 
-3-of-5 escrow multisig coordinated in Sparrow. Public keys / xpubs published here before first **mainnet** submission.
+3-of-5 escrow multisig coordinated in Sparrow. Public keys / xpubs **must** be published here before first **mainnet** submission. Until then Workers return `501 pending_keyholders` from `/escrow/allocate` on mainnet.
+
+Ops: after publishing the descriptor, set Worker secrets `ESCROW_DESCRIPTOR` and `ESCROW_ADDRESS_MAP` (JSON index→address). See `docs/keyholder-stall-runbook.md` (Q21).
 
 ## Rules
 
