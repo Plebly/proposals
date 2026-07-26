@@ -1,6 +1,10 @@
 ---
 id: null
 title: "Short descriptive title"
+proposal_type: bounty
+tags: []
+# Optional shared Commons / parent initiative label; informational only.
+parent_initiative: null
 status: pr_open
 target_sats: null
 # milestones[].dependencies = prior milestone ids in this file (Q11), e.g. [m1]

@@ -8,6 +8,27 @@
   "properties": {
     "id": { "type": ["string", "null"] },
     "title": { "type": "string", "minLength": 3, "maxLength": 200 },
+    "proposal_type": {
+      "type": "string",
+      "enum": ["bounty", "direct"],
+      "default": "bounty",
+      "description": "bounty = open claim; direct = proposer is recipient (no claim step)"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 40 },
+      "maxItems": 12,
+      "description": "Suggested vocabulary plus freeform tags"
+    },
+    "parent_initiative": {
+      "type": ["string", "null"],
+      "maxLength": 200,
+      "description": "Optional parent initiative label (e.g. Commons thread)"
+    },
+    "delivery_window_ends_at": {
+      "type": ["string", "null"],
+      "description": "ISO timestamp — direct proposals only"
+    },
     "status": {
       "type": "string",
       "enum": [

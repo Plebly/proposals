@@ -3,10 +3,11 @@
 **Status:** living description of the running system (not a wishlist).  
 **Date:** 2026-07-25  
 **Network (deployed):** Bitcoin **signet**  
-**API:** https://plebly-api.securesovereigns.workers.dev (`plebly-api` v0.4.0)  
+**Escrow mode (live):** `single-key-test` (`/health.escrow_mode`)  
+**API:** https://plebly-api.securesovereigns.workers.dev (`plebly-api` v0.4.0, workers `1341574`)  
 **Site:** https://plebly.fund  
 
-Related docs: `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
+Related docs: [`remaining-human-steps.md`](remaining-human-steps.md) (ops checklist), [`post-mvp-roadmap.md`](post-mvp-roadmap.md) (after-MVP engineering plan), `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
 
 ---
 
@@ -90,13 +91,27 @@ flowchart TB
 | `MEMPOOL_API` | `https://mempool.space/signet/api` |
 | `PROPOSALS_REPO` | `Plebly/proposals` |
 | `FRONTEND_ORIGIN` | `https://plebly.fund` |
-| `TEST_ESCROW_ADDRESS` | Shared signet receive (smoke / test) |
+| `TEST_ESCROW_ADDRESS` | **Only** in single-key-test mode (must be absent in multisig) |
 | `TEST_SUBMISSION_FEE_ADDRESS` | Fee/bond receive on signet |
 | KV | `USERS`, `CONTRIBUTIONS`, `SESSIONS`, `SWAPS` |
 | R2 | `MEDIA` → `plebly-media` |
 | Cron | `* * * * *` |
 
 **Secrets / vars (not all in git):** `SESSION_SECRET`, `HOOK_SECRET`, GitHub OAuth + App, `X_CLIENT_ID` / `X_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `AI_REVIEW_MODEL`, `AI_REVIEW_PROMPT_VERSION`, `BOOTSTRAP_REVIEWERS`, mainnet `SUBMISSION_FEE_ADDRESS` / `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP`.
+
+### Escrow mode boundary (hard fail)
+
+Resolved by `workers/src/lib/escrow-mode.ts` from env — **not** from `BITCOIN_NETWORK` alone:
+
+| Mode | Required env | Forbidden env |
+|------|--------------|---------------|
+| `single-key-test` | `TEST_ESCROW_ADDRESS` | `ESCROW_DESCRIPTOR`, `ESCROW_ADDRESS_MAP`; also forbidden when `BITCOIN_NETWORK=mainnet` |
+| `multisig` | `ESCROW_DESCRIPTOR` **and** `ESCROW_ADDRESS_MAP` (non-empty JSON index→address) | `TEST_ESCROW_ADDRESS` |
+| *(misconfigured)* | any other combination | — |
+
+Misconfiguration: Worker **refuses all non-`/health` requests** with HTTP 503 + `code: escrow_misconfigured` and logs the missing/conflicting vars. Cron skips work. `/health` returns `ok: false` (503) with the same mode fields so monitoring needs no mode-specific logic.
+
+`/health` always includes: `escrow_mode`, `escrow_descriptor_set`, `escrow_test_address_set`, `escrow_map_size`, `escrow_next_index`, `escrow_map_remaining`, `escrow_map_exhausted`, `escrow_config_error`.
 
 ### Frontend (`plebly.fund/src/config.ts` + Pages CI)
 
@@ -131,9 +146,18 @@ Installation token opens PRs into `Plebly/proposals` (propose, **amend**, claim,
 
 ## 6. Proposal lifecycle
 
+### Proposal types (`proposal_type`)
+
+| Type | Default | Claim bond | Deliverable author | Windows |
+|------|---------|------------|--------------------|---------|
+| `bounty` | yes (absent → bounty) | required | claimer | funding + claim |
+| `direct` | opt-in | none — `/claims/*` rejected | **proposer** | funding + **delivery** (90d from allocate) |
+
+`direct` stays in `listed` / `funding` / `claimable` until the proposer submits a deliverable → `in_review` (same AI + human reviewer path). No new status in v1. Delivery window expiry → `underfunded` / refund path.
+
 ### Status vocabulary (schema)
 
-`pr_open` → `unindexed` → `listed` | `declined` | `declined_fundable` → `funding` / `claimable` → `claimed` → `in_review` → `completed` | `rejected`  
+`pr_open` → `unindexed` → `listed` | `declined` | `declined_fundable` → `funding` / `claimable` → `claimed` (bounty) → `in_review` → `completed` | `rejected`  
 
 Also: `underfunded`, `abandoned_vote`, `refunding`, `redirected`.
 
@@ -188,12 +212,17 @@ Schema: `proposals/schema/proposal.schema.json`. Template defaults empty arrays.
 
 `POST /escrow/allocate` `{ proposal_id, status: listed|declined_fundable, patch_proposal? }`:
 
-| Network | Behavior |
-|---------|----------|
-| **Signet** | Returns `TEST_ESCROW_ADDRESS`, index `0`, writes `escrow_allocated_at` + `funding_window_ends_at` (+180d); optional PR patch (default on) |
-| **Mainnet** | Requires `ESCROW_DESCRIPTOR` + address in `ESCROW_ADDRESS_MAP` for next `escrow:next_index`; else **501** |
+| Mode | Behavior |
+|------|----------|
+| **`single-key-test`** | Returns shared `TEST_ESCROW_ADDRESS`, index `0`, writes funding-window fields; response always includes `escrow_mode: "single-key-test"` (and legacy `mode`) |
+| **`multisig`** | Peeks `escrow:next_index`, looks up that index in `ESCROW_ADDRESS_MAP`; **no fallback address**. Missing index → **501** `pending_address_map` without burning the index. Success advances index and returns `escrow_mode: "multisig"` |
+| **misconfigured** | 503 before allocate runs |
 
-Does not derive addresses in-Worker from the descriptor yet — Sparrow-precomputed map is the writer companion to KV index.
+Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed `ESCROW_ADDRESS_MAP` is the writer companion to KV index. Map exhaustion: `escrow_map_remaining === 0` / `escrow_map_exhausted: true` on `/health`.
+
+### Release / disbursement gate
+
+`POST /claims/outcome` with `outcome: "completed"` (authorize keyholder disbursement after review) calls `assertMultisigForRelease`. In `single-key-test` it returns **403** `multisig_required_for_release` with an explicit error that multisig is required for disbursement. Rejected outcomes are unchanged. Workers still do not sign PSBTs — only gate the ops completion path.
 
 ---
 
@@ -209,8 +238,8 @@ Does not derive addresses in-Worker from the descriptor yet — Sparrow-precompu
 
 ### Lightning (Boltz reverse swap)
 
-- Enabled automatically on mainnet/testnet; **off on signet** unless `LIGHTNING_ENABLED=true`.
-- UI gated by `lightningUiAllowed()` (signet hidden unless Vite flags).
+- Enabled automatically on mainnet/testnet; **always off on signet** (Boltz has no signet pair).
+- UI gated by `lightningUiAllowed()` (signet always hidden).
 - `POST /lightning/invoice` verifies proposal escrow, creates reverse swap, stores encrypted secrets in `SWAPS`.
 - Cron claimer broadcasts claim into escrow; floor still uses on-chain confirmed balance only.
 - Mainnet prefers confirmed lockup before claim broadcast; signet allows mempool claim for speed.
@@ -431,10 +460,13 @@ SPA routes (`plebly.fund/src/router.ts`):
 | `/u/:username` | Public profile (+ reviewer badge when seated) |
 | `/account` | Profile, watching, claims (+ history), proposals; reviewer / funder links |
 | `/about` | Beliefs, how-it-works, **Reviewers** governance section, parameters, residual trust, get involved |
+| `/embed.js` | Static third-party widget (`public/embed.js`) — loads `GET /embed/:proposalId` and renders a funding bar linked to `/p/{id}` |
 
-Login: nav **Log in** menu offers **GitHub** and **X** (Nostr also available via API/auth routes). Top nav: Projects · Start a project · About (+ auth). Deliverable submit shows **AI first-pass** card inline. Footer: Explore (incl. Reviewers) · Source · Follow.
+Login: nav **Log in** menu offers **GitHub** and **Nostr** (NIP-07 extension → challenge-wrapped NIP-98). X OAuth remains on the API but is hidden in the SPA until secrets are set. Top nav: Projects · Start a project · About (+ auth). Deliverable submit shows **AI first-pass** card inline. Footer: Explore (incl. Reviewers) · Source · Follow.
 
 Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutations go through Workers → PRs. Nested frontmatter parsed in `src/frontmatter.ts` (SPA) and `workers/src/lib/yaml-fm.ts` (API).
+
+**Issue → draft PR:** labeling an issue `plebly-proposal` or `plebly` runs `proposals/.github/workflows/issue-to-proposal.yml` (GITHUB_TOKEN only) and opens a draft PR into `proposals/unindexed/`. Usage for third-party embeds: [`embed.md`](embed.md).
 
 ---
 
@@ -442,7 +474,7 @@ Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutation
 
 | Auth | Routes |
 |------|--------|
-| Public | `/health`, proposal claim status, contrib list, LN status/swap poll, ballot get, stall get, media get, public profile, reviewer roster / open decisions / open removals / decision get |
+| Public | `/health`, **`GET /embed/:proposalId`** (third-party CORS `*`, confirmed escrow balance + funding %), proposal claim status, contrib list, LN status/swap poll, ballot get, stall get, media get, public profile, reviewer roster / open decisions / open removals / decision get |
 | Session | **propose submit + amend**, claim, checkpoint, challenge open, rebuttal, watch, profile CRUD, contrib claim, ballot vote, refund register, media upload, deliverable, reviewer vote/dissent, removal open/vote |
 | HOOK_SECRET | allocate, stall, outcome, challenge accept, refundable bonds, ballot open/tally, refunds list, reviewer bootstrap, decision open/tally, removal tally |
 
@@ -488,6 +520,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Review decision ballot | 14 days |
 | AI prompt / model | `v1` / `claude-sonnet-4-20250514` (env-overridable) |
 | Network | **signet** |
+| Escrow mode (live) | **`single-key-test`** |
 
 ---
 
@@ -495,52 +528,57 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 
 | Tier | Command | Risk |
 |------|---------|------|
-| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~166 tests) |
-| Frontend unit | `cd plebly.fund && npm test` | None (~45 tests) |
+| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~191 tests) |
+| Frontend unit | `cd plebly.fund && npm test` | None (~57 tests) |
 | Proposal schema + fee helpers | `cd proposals && npm run validate:all && npm test` | None |
 | Live read-only smoke | `cd workers && npm run smoke:signet` | None |
+| Mainnet readiness smoke | `cd workers && npm run smoke:mainnet` | None (refuses unless network=mainnet) |
 | Opt-in spend | Manual Sparrow on **your** signet addresses | Signet sats |
 
-Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility, resolution abuse, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation.
+Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, **escrow mode hard boundary** (`src/__tests__/escrow-mode.test.ts`: misconfig refuse, allocate mode field, map miss, release refuse in test mode, health capacity), escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility, resolution abuse, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation.
 
 ---
 
 ## 16. Explicit gaps / TBD (do not assume done)
 
-Launch ops runbook: [`docs/mainnet-launch-ops.md`](mainnet-launch-ops.md).
+Human checklist: [`remaining-human-steps.md`](remaining-human-steps.md).  
+Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 
 | Gap | Notes |
 |-----|-------|
-| KEYHOLDERS production xpubs / descriptor | Still TBD in `KEYHOLDERS.md`; mainnet allocate 501 until `ESCROW_DESCRIPTOR` + `ESCROW_ADDRESS_MAP` secrets set |
-| Mainnet fee address in PARAMETERS | Mainnet still `TBD`; **signet** CI var `SUBMISSION_FEE_ADDRESS` is set; flip to mainnet address before launch |
+| Operator-owned signet `TEST_*` addresses | Live still uses public BIP39 vector `tb1qacjkk…` — observe only until Sparrow wallet you control is wired |
+| Bootstrap reviewer identities | **Not seeded** (`count: 0`) — `scripts/bootstrap-reviewers.sh` + `REVIEWERS.md` (exactly five final ids; seats permanent) |
+| KEYHOLDERS production xpubs / descriptor | Still TBD; required for `escrow_mode=multisig` (descriptor + map, no `TEST_ESCROW_ADDRESS`) |
+| Mainnet fee address in PARAMETERS | Mainnet still `TBD`; signet CI var set; flip before launch |
+| Signet cannot authorize release | By design: `outcome: completed` → 403 in `single-key-test`; needs multisig mode |
 | Descriptor → address derivation in Worker | **v1 deferred** — Sparrow-precomputed `ESCROW_ADDRESS_MAP` only |
-| Multisig release automation | Human keyholders + runbooks (intentional) |
-| Bootstrap reviewer identities | **Not seeded** — `scripts/bootstrap-reviewers.sh` + mirror `REVIEWERS.md` (exactly five final ids; seats permanent) |
-| Anthropic key in production | Set `ANTHROPIC_API_KEY`; without it AI → ambiguous |
-| X OAuth credentials | Wired; needs portal app + secrets |
-| Lightning on default signet deploy | **Off by design** — auto-on mainnet/testnet; signet needs `LIGHTNING_ENABLED=true` |
+| Multisig PSBT signing in Worker | Never — human keyholders + Sparrow / runbooks |
+| Anthropic key in production | Unset live (`ai_review: false`); without it AI → ambiguous |
+| X OAuth credentials | Unset live (`x_oauth: false`) |
+| Lightning on signet | **Always off** — auto-on mainnet; LN staging via `BITCOIN_NETWORK=testnet` |
 | Ops suspend of other users | Self-only today |
 | Automated refund batching | **v1 deferred** — register + keyholder batch only |
-| Branch-protection on Completeness | **`validate` required on `main`** (enforce_admins); keep `vars.SUBMISSION_FEE_ADDRESS` set or fee gate still skips |
+
+**Already shipped (not gaps):** escrow mode hard boundary, flip script + mainnet/signet smokes, Pages network vars, Completeness `validate` required on `main`.
 
 ---
 
 ## 17. Typical end-to-end paths (as built)
 
-### A. List and fund a bounty (signet)
+### A. List and fund a bounty (signet, `single-key-test`)
 
 1. Pay 10k fee → submit on site (milestones / depends_on / related_work as needed) → PR to `unindexed/` → merge to `main`.
 2. After merge, proposer may **Edit** in-app (amend PR) while pre-claim.
-3. Hook allocate (or manual FM) sets address + funding window → `listed` / funding.
-4. Donors send signet sats (and/or LN if enabled); balance updates on site.
+3. Hook allocate returns shared `TEST_ESCROW_ADDRESS` with `escrow_mode: "single-key-test"` + funding window → `listed` / funding.
+4. Donors send signet sats (Lightning off on signet); balance updates on site.
 5. At ≥100k confirmed, project is open to claim.
 
 ### B. Claim and deliver
 
 1. Builder pays bond → site opens claim PR → slot held in KV.
 2. Reviewer merges → cron sets `claimed_at` from `merged_at`.
-3. Checkpoint by day 45 (+grace); deliverable submit → AI first-pass → reviewer ballot (unless clear fail) → hook outcome.
-4. Hook outcome `completed` → bond refundable + earned reviewer seat.
+3. Checkpoint by day 45 (+grace); deliverable submit → AI first-pass → reviewer ballot (unless clear fail).
+4. Hook outcome `completed` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat; keyholders cosign the on-chain release out-of-band.
 
 ### C. Failure / abandon
 
@@ -559,13 +597,14 @@ Launch ops runbook: [`docs/mainnet-launch-ops.md`](mainnet-launch-ops.md).
 | Claims | `workers/src/lib/builder-claim.ts`, `claim-lifecycle.ts`, `claim-abuse.ts`, `routes/claims.ts` |
 | Reviewers / decisions | `lib/reviewers.ts`, `lib/review-decisions.ts`, `lib/review-quorum.ts`, `lib/ai-review.ts`, `lib/rebuttal.ts`, `lib/reviewer-removal.ts`, `routes/reviewers.ts` |
 | Contrib / ballots / refunds | `lib/contrib.ts`, `lib/ballots.ts`, `routes/contributions.ts`, `routes/ballots.ts`, `routes/refunds.ts` |
-| Escrow | `lib/escrow-allocate.ts`, `routes/escrow.ts` |
+| Escrow mode / allocate | `lib/escrow-mode.ts`, `lib/escrow-allocate.ts`, `routes/escrow.ts`, `__tests__/escrow-mode.test.ts` |
 | LN | `lib/claimer.ts`, `lib/boltz.ts`, `routes/lightning.ts` |
 | Auth | `routes/auth.ts` (GitHub, X PKCE, Nostr) |
 | Propose / amend | `workers/src/routes/proposals.ts`, `lib/yaml-fm.ts`, `lib/proposal-deps.ts`, `lib/proposer-match.ts` |
 | Frontend | `plebly.fund/src/{main,router,propose-page,propose-milestones,propose-deps,proposal-page,proposal-ui,builder-panel,review-panel,governance-page,reviewers,fee-pay,github,frontmatter}.ts` |
-| Schema / CI | `proposals/schema/proposal.schema.json`, `template/proposal.md`, `.github/workflows/completeness.yml` |
-| Launch ops | `proposals/docs/mainnet-launch-ops.md`, `proposals/scripts/bootstrap-reviewers.sh` |
+| Schema / CI | `proposals/schema/proposal.schema.json`, `template/proposal.md`, `.github/workflows/completeness.yml`, `.github/workflows/issue-to-proposal.yml` |
+| Embed widget | `workers/src/routes/embed.ts`, `plebly.fund/public/embed.js`, `proposals/docs/embed.md` |
+| Launch ops | `docs/remaining-human-steps.md`, `docs/mainnet-launch-ops.md`, `proposals/scripts/bootstrap-reviewers.sh`, `workers/scripts/flip-to-mainnet.sh` |
 | AI prompts | `proposals/review-prompts/v1.md` |
 | Parameters | `proposals/PARAMETERS.md`, `proposals/REVIEWERS.md`, `proposals/KEYHOLDERS.md`, `workers/src/lib/claim-params.ts`, `reviewer-params.ts` |
 

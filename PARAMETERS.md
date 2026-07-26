@@ -2,6 +2,8 @@
 
 Fixed at first public submission. Changes require a public process and thirty-day notice.
 
+Community parameter votes are not live. Any future ballot system is volume-gated and cannot change these parameters until its rules and activation process are published.
+
 ## Section VII (launch-locked)
 
 | Parameter | Value |
@@ -12,6 +14,8 @@ Fixed at first public submission. Changes require a public process and thirty-da
 | Minimum funding (claim floor) | 100,000 sats |
 | Claim window | 90 days from claim acceptance |
 | Claim extension | One 30-day extension via reviewer supermajority |
+| Delivery window (direct proposals) | 90 days from escrow allocation |
+| Proposal type default | `bounty` (missing field → bounty) |
 
 ## Ratified (pre-launch process defaults)
 
@@ -27,6 +31,7 @@ Fixed at first public submission. Changes require a public process and thirty-da
 | Submission fee confirmations | 1 |
 | Funding / badge / vote confirmations | 3 |
 | Completion finality confirmations | 3 |
+| Core annual gap | 2,100,000 sats |
 
 Fee/bond receive address remains TBD until ops wallet is published (Workers: `SUBMISSION_FEE_ADDRESS` / signet `TEST_SUBMISSION_FEE_ADDRESS`; CI: repo var `SUBMISSION_FEE_ADDRESS`).
 
