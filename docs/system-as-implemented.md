@@ -1,13 +1,13 @@
 # Plebly — system as implemented
 
 **Status:** living description of the running system (not a wishlist).  
-**Date:** 2026-07-25  
+**Date:** 2026-07-26  
 **Network (deployed):** Bitcoin **signet**  
 **Escrow mode (live):** `single-key-test` (`/health.escrow_mode`)  
 **API:** https://plebly-api.securesovereigns.workers.dev (`plebly-api` v0.4.0, workers `1341574`)  
 **Site:** https://plebly.fund  
 
-Related docs: [`remaining-human-steps.md`](remaining-human-steps.md) (ops checklist), [`post-mvp-roadmap.md`](post-mvp-roadmap.md) (after-MVP engineering plan), `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
+Related docs: [`remaining-human-steps.md`](remaining-human-steps.md) (ops checklist — human-only leftovers), [`post-mvp-roadmap.md`](post-mvp-roadmap.md) (after-MVP engineering plan), `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` / `REVIEWERS.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
 
 ---
 
@@ -136,11 +136,11 @@ Misconfiguration: Worker **refuses all non-`/health` requests** with HTTP 503 + 
 
 Header: `X-Plebly-Hook-Secret`. **Must not** reuse `SESSION_SECRET`. Fails closed if unset.
 
-Used for: `/escrow/allocate`, `/escrow/stall`, `/claims/outcome`, `/claims/challenge/accept`, `/claims/bonds/refundable`, `/ballots/open`, `/ballots/:id/tally`, `/refunds/proposal/:id`, `/reviewers/bootstrap`, `/reviewers/decisions/open`, `/reviewers/decisions/:id/tally`, `/reviewers/removals/:id/tally`.
+Used for: `/escrow/allocate`, `/escrow/stall`, `/claims/outcome`, `/claims/challenge/accept`, `/claims/bonds/refundable`, `/ballots/open`, `/ballots/:id/tally`, `/refunds/proposal/:id`, `/reviewers/bootstrap`, `/reviewers/decisions/open`, `/reviewers/decisions/:id/tally`, `/reviewers/removals/:id/tally`, `/ops/roles/bootstrap`, `/ops/roles/ballots/:id/tally`.
 
 ### GitHub App
 
-Installation token opens PRs into `Plebly/proposals` (propose, **amend**, claim, reopen, allocate patch, ballots, deliverables, dissent, rebuttal, AI fail notes). Requires Pull requests (+ Issues for PR comments).
+Installation token opens PRs into `Plebly/proposals` (propose, **amend**, claim, reopen, allocate patch, ballots, deliverables, dissent, rebuttal, AI fail notes, listing-challenge decline, **removal evidence/result** mirrors). Requires Pull requests (+ Issues for PR comments).
 
 ---
 
@@ -222,7 +222,7 @@ Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed 
 
 ### Release / disbursement gate
 
-`POST /claims/outcome` with `outcome: "completed"` (authorize keyholder disbursement after review) calls `assertMultisigForRelease`. In `single-key-test` it returns **403** `multisig_required_for_release` with an explicit error that multisig is required for disbursement. Rejected outcomes are unchanged. Workers still do not sign PSBTs — only gate the ops completion path.
+`POST /claims/outcome` with `outcome: "completed"` (authorize keyholder disbursement after review) calls `assertMultisigForRelease`. In `single-key-test` it returns **403** `multisig_required_for_release`. On multisig, non-forced completion requires a tallied approve on `deliverable_confirm` or `second_review` — preferably via explicit `decision_id` (`resolveReleaseDecision`). `claim_extension` / `listing_challenge` approves **cannot** authorize release. `force: true` skips the gate and writes an immutable `forceoutcome:{id}` audit row (+ index). Rejected outcomes are unchanged. Workers still do not sign PSBTs — only gate the ops completion path.
 
 ---
 
@@ -324,7 +324,7 @@ Removes profile, username, watches, pending-user index; **retains** `claimledger
 
 ---
 
-## 8b. Reviewers, AI triage, dissent, rebuttal, removal
+## 8b. Reviewers, AI triage, dissent, rebuttal, removal, extensions, listing challenges
 
 ### Reviewer set (KV)
 
@@ -335,7 +335,7 @@ Removes profile, username, watches, pending-user index; **retains** `claimledger
 | `reviewer:completions` | Platform completion counter (ten-bounty bootstrap threshold) |
 | `reviewer:completion:{proposalId}` | Idempotent completion bump |
 
-- **Bootstrap:** exactly five seats via hook `POST /reviewers/bootstrap` (body `user_ids` or env `BOOTSTRAP_REVIEWERS`). Seats retained permanently.
+- **Bootstrap:** exactly five seats via hook `POST /reviewers/bootstrap` (body `user_ids` or env `BOOTSTRAP_REVIEWERS`). Seats retained permanently. **Live roster is empty until ops seeds** (see remaining-human-steps).
 - **Earned:** automatic on `POST /claims/outcome` → `completed` (`addEarnedReviewer`). After ten platform completions, earning is still via completions only (no new bootstrap path).
 - Removed reviewers may re-earn via a later completion.
 
@@ -348,7 +348,11 @@ pass iff yes >= need_yes AND (yes + no) >= 5 AND yes > 0
 
 Non-responses are abstentions. Abstentions never satisfy `need_yes`. Bootstrap roster 5 ⇒ need 4 yes and all five non-abstaining.
 
-Routes: `/reviewers/decisions/*` (open/vote/tally/dissent). KV: `revdec:`, `revdecopen:`.
+**Kinds:** `deliverable_confirm` | `second_review` | `claim_extension` | `listing_challenge`.
+
+Routes: `/reviewers/decisions/*` (open/vote/tally/dissent + session `request-extension` / `challenge-listing`). KV: `revdec:`, `revdecopen:`, `revdec:index`.
+
+**Tally timing:** `tallyReviewDecision` / `tallyRemovalBallot` / ops-role tally reject early tallies unless `force: true` (hook). Cron `processExpiredGovernance` auto-tallies after `closes_at`.
 
 ### AI first-pass (on deliverable submit)
 
@@ -368,12 +372,27 @@ Any active reviewer: `POST /reviewers/decisions/:id/dissent` → GitHub App PR a
 - `POST /claims/rebuttal` (session, fulfiller, within 14 days) → PR `## Rebuttal` + open `second_review` decision (round 2).
 - Second reject is final (`final` outcome / resolve rebuttal). No third appeal.
 
+### Claim extension
+
+- Session: fulfiller `POST /reviewers/decisions/request-extension` `{ proposal_path }` while status is `claimed` or `in_review` → opens `claim_extension` decision.
+- On passed tally: `grantClaimExtension` adds **+30 days** in `claimext:{proposalId}` (cumulative).
+- Claim window end: `claimWindowEnd(claimed_at, extraDays)`; `GET` claim status exposes `claim_window_ends_at`.
+- SPA: fulfiller **Request 30-day extension** on project Build panel (`builder-panel.ts`).
+
+### Listing challenge
+
+- Session: eligible funder `POST /reviewers/decisions/challenge-listing` `{ proposal_path, rationale }` (≥40 chars) for statuses `listed` | `funding` | `claimable`.
+- Opens `listing_challenge` reviewer decision; rationale stored at `listchal:{decisionId}`.
+- On passed tally: GitHub App PR moves proposal toward `declined/` with status `declined`.
+- SPA: sidebar **Challenge listing** panel on those statuses (`listing-challenge-panel.ts`); open ballots also appear on `/reviewers`.
+
 ### Reviewer removal (funders)
 
 - Eligible: identity-linked contribution with ≥3 confs **and ≥10,000 sats** to any watched escrow in prior 12 months (`contrib.ts` + `escrowwatch:index`).
 - Vote: ⅔ of votes cast; quorum ≥5 participating (or all eligible if &lt;5).
 - Bootstrap seats **cannot** be removed. Target cannot vote on their own ballot. **30-day cooldown** after any tally against a target.
 - Routes: `/reviewers/removals/*` (list open via `GET /reviewers/removals`). KV: `revremove:`, `revremoveopen:`, `revremove:openindex`, `revremovecd:`.
+- **Git mirror (best-effort):** on open → evidence PR; on tally → result PR. Canonical file `proposals/docs/governance/reviewer-removals.md` (`lib/removal-git.ts`); falls back to appending under `REVIEWERS.md` if the mirror path is missing on `main`. Ballot view may include `evidence_pr_url` / `result_pr_url`. Ballot open/tally still succeeds if GitHub App is unavailable.
 
 ### Abuse / gaming mitigations (resolution layer)
 
@@ -382,7 +401,9 @@ Any active reviewer: `POST /reviewers/decisions/:id/dissent` → GitHub App PR a
 | Stack bootstrap cohorts via hook | Seed rejects once 5 bootstrap seats exist (unless identical reseed) |
 | Remove bootstrap via funder vote | `kind: bootstrap` seats cannot be removed |
 | Fulfiller votes own deliverable | Vote + tally exclude `claimfulfiller` |
-| Complete without reviewer approve | `/claims/outcome` completed requires tallied approve (`force:true` ops escape) |
+| Complete without reviewer approve | `/claims/outcome` completed requires tallied `deliverable_confirm` / `second_review` (`decision_id` preferred; `force:true` ops escape + `forceoutcome:` audit) |
+| Extension / listing approve as release | Release kinds only — `resolveReleaseDecision` rejects other kinds |
+| Early tally before closes_at | Rejected unless hook `force: true`; cron tallies after close |
 | Reset 14d rebuttal clock | `openRebuttalWindow` does not overwrite open/pending/resolved state |
 | Dissent PR spam | 1 dissent per reviewer per decision |
 | Dust-sybil removal votes | ≥10k sats confirmed contribution required |
@@ -390,7 +411,35 @@ Any active reviewer: `POST /reviewers/decisions/:id/dissent` → GitHub App PR a
 | AI / deliverable DoS | 5 submissions/day/proposal; block while decision open |
 | Prompt path traversal | `AI_REVIEW_PROMPT_VERSION` sanitized to safe filename |
 
-Residual: HOOK_SECRET holders can still `force` complete / open decisions (ops trust). Sybil earned reviewers still cost a real `completed` bounty.
+Residual: HOOK_SECRET holders can still `force` complete / open decisions (ops trust; force completes are audited in KV). Sybil earned reviewers still cost a real `completed` bounty.
+
+---
+
+## 8c. Operational roles (coordination labels — no custody)
+
+**Authority boundary:** ops roles never grant escrow signing, fund movement, or parameter-change power. Labels + coordination only.
+
+| Kind | Label |
+|------|--------|
+| `triage_steward` | Triage steward |
+| `incident_scribe` | Incident scribe |
+| `comms` | Comms |
+
+**Volume gate** (`opsRolesGate`): open when `platform_completions ≥ 10` **and** active reviewers ≥ 5.
+
+**Lifecycle**
+
+- Bootstrap seed: hook `POST /ops/roles/bootstrap` (or env `OPS_USER_IDS` round-robin) → `source: bootstrap`.
+- Nominate: session active reviewer `POST /ops/roles/nominate` `{ kind, action: grant\|remove\|retain, nominee_user_id, rationale }` (20–4000 chars).
+- Vote: active reviewers `POST /ops/roles/ballots/:id/vote` (nominee cannot vote).
+- Quorum: same cast-based math as funder removal (⅔ of cast; floor min(5, eligible reviewers)).
+- Tally: hook / cron; grant/retain seats for `OPS_ROLE_TERM_DAYS` (180); remove clears seat. Cooldown 30d per kind+nominee.
+- Public read: `GET /ops/roles` returns seats, open ballots, gate, kinds. Legacy env-only echo when no KV seats.
+- Params: `lib/ops-role-params.ts`. KV: `opsrole:`, `opsrole:index`, `opsroleballot:`, `opsroleballot:openindex`, `opsroleballotopen:`, `opsroleballotcd:`.
+
+**SPA:** `/reviewers` → Operational roles (seats incl. vacant, open ballots with action-labeled votes, nominate form when gate open + reviewer). Jump nav covers Roster / Decisions / Removals / Roles.
+
+**Not live:** community parameter proposals (`GET /ops/param-proposals` → `[]`; `lib/param-votes.ts` stub).
 
 ---
 
@@ -455,10 +504,10 @@ SPA routes (`plebly.fund/src/router.ts`):
 | `/` | Listed/claimed/completed cards; balances from mempool |
 | `/propose` | Create: fee-pay + narrative + milestones + depends_on + related_work |
 | `/propose?edit={path}` | Amend prefill (on-main, pre-claim, proposer only) → `POST /proposals/update` |
-| `/proposal/{status}/{slug}` | Detail: quiet hero meta (by · date · id · Edit); slim funding strip; narrative first then milestones + **Context** (depends_on / related_work); sticky sidebar **Build + Donate**; on-chain behind disclosure; **reviewer decision** (`in_review`), **rebuttal** (`rejected`), ballots/refunds when status fits |
-| `/reviewers` | Governance: roster, open decisions, removal ballots (funder vote / open) — linked from footer + About, not top nav |
+| `/proposal/{status}/{slug}` | Detail: quiet hero meta (by · date · id · Edit); slim funding strip; narrative first then milestones + **Context** (depends_on / related_work); sticky sidebar **Build + Donate**; on-chain behind disclosure; **reviewer decision** (`in_review`), **rebuttal** (`rejected`), **claim extension** (fulfiller on claimed/in_review), **listing challenge** (listed/funding/claimable), ballots/refunds when status fits |
+| `/reviewers` | Governance: jump nav; active roster; open decisions; removal ballots (+ evidence/result PR links); open-a-removal form; **operational roles** (seats / ballots / nominate when gated open) — footer + About |
 | `/u/:username` | Public profile (+ reviewer badge when seated) |
-| `/account` | Profile, watching, claims (+ history), proposals; reviewer / funder links |
+| `/account` | Profile (bio, skills tags, links, payout, funder appearance), watching, claims (+ history), proposals; reviewer / funder links |
 | `/about` | Beliefs, how-it-works, **Reviewers** governance section, parameters, residual trust, get involved |
 | `/embed.js` | Static third-party widget (`public/embed.js`) — loads `GET /embed/:proposalId` and renders a funding bar linked to `/p/{id}` |
 
@@ -474,17 +523,17 @@ Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutation
 
 | Auth | Routes |
 |------|--------|
-| Public | `/health`, **`GET /embed/:proposalId`** (third-party CORS `*`, confirmed escrow balance + funding %), proposal claim status, contrib list, LN status/swap poll, ballot get, stall get, media get, public profile, reviewer roster / open decisions / open removals / decision get |
-| Session | **propose submit + amend**, claim, checkpoint, challenge open, rebuttal, watch, profile CRUD, contrib claim, ballot vote, refund register, media upload, deliverable, reviewer vote/dissent, removal open/vote |
-| HOOK_SECRET | allocate, stall, outcome, challenge accept, refundable bonds, ballot open/tally, refunds list, reviewer bootstrap, decision open/tally, removal tally |
+| Public | `/health`, **`GET /embed/:proposalId`** (third-party CORS `*`, confirmed escrow balance + funding %), proposal claim status, contrib list, LN status/swap poll, ballot get, stall get, media get, public profile, reviewer roster / open decisions / open removals / decision get, **`GET /ops/roles`**, `GET /ops/param-proposals` |
+| Session | **propose submit + amend**, claim, checkpoint, challenge open, rebuttal, watch, profile CRUD, contrib claim, ballot vote, refund register, media upload, deliverable, reviewer vote/dissent, removal open/vote, **claim extension request**, **listing challenge open**, **ops role nominate/vote** |
+| HOOK_SECRET | allocate, stall, outcome, challenge accept, refundable bonds, ballot open/tally, refunds list, reviewer bootstrap, decision open/tally, removal tally, **ops roles bootstrap/tally** |
 
-Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf upgrade → escrow contrib index → funding windows / milestones / idle ballots.
+Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf upgrade → escrow contrib index → funding windows / milestones / idle ballots → **`processExpiredGovernance`** (expired review / removal / ops-role tallies).
 
 ---
 
 ## 13. KV / R2 key patterns (operational)
 
-**USERS:** `user:`, `uname:`, `watch:`, `paytxid:`, `bondtxid:`, `claim:`, `claimpendinguser:`, `claimactive:` + `claimactive:index`, `claimowner:`, `claimfulfiller:`, `claimledger:`, `claimrate:`, `claimchallenge:`, `claimreopen:`, `claimreopen_needs_human:`, `bondrefundable:index`, `escrow:next_index`, `escrowwatch:index`, `release_blocked:`, `ballot:`, `ballotopen:`, `mediaupload:`, `reviewer:` + `reviewer:index` + `reviewer:completions`, `revdec:` + `revdecopen:` + `revdec:index`, `rebuttal:`, `revremove:` + `revremoveopen:` + `revremove:openindex` + `revremovecd:`, `xoauth:` (SESSIONS)
+**USERS:** `user:`, `uname:`, `watch:`, `paytxid:`, `bondtxid:`, `claim:`, `claimpendinguser:`, `claimactive:` + `claimactive:index`, `claimowner:`, `claimfulfiller:`, `claimledger:`, `claimrate:`, `claimchallenge:`, `claimreopen:`, `claimreopen_needs_human:`, `bondrefundable:index`, `escrow:next_index`, `escrowwatch:index`, `release_blocked:`, `ballot:`, `ballotopen:`, `mediaupload:`, `reviewer:` + `reviewer:index` + `reviewer:completions` + `reviewer:completion:`, `revdec:` + `revdecopen:` + `revdec:index`, `rebuttal:`, `revremove:` + `revremoveopen:` + `revremove:openindex` + `revremovecd:`, `claimext:`, `listchal:`, `opsrole:` + `opsrole:index`, `opsroleballot:` + `opsroleballot:openindex` + `opsroleballotopen:` + `opsroleballotcd:`, `forceoutcome:` + `forceoutcome:index`, `xoauth:` (SESSIONS)
 
 **CONTRIBUTIONS:** `contrib:{proposalId}`  
 
@@ -502,7 +551,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 |-----------|------------|
 | Submission fee / claim bond | 10,000 sats exact |
 | Claim floor | 100,000 sats confirmed |
-| Claim window | 90 days from `claimed_at` |
+| Claim window | 90 days from `claimed_at` **+ cumulative claim extensions** (+30d per passed `claim_extension`) |
 | Checkpoint | day 45 + 7d grace |
 | Pending TTL | 72 hours |
 | Reclaim cooldown | 30 days |
@@ -517,10 +566,16 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Reviewer quorum | ⌈⅔ roster⌉ yes + ≥5 non-abstain |
 | Bootstrap seats / threshold | 5 seats / 10 completions |
 | Rebuttal window | 14 days |
-| Review decision ballot | 14 days |
+| Review / removal / ops-role ballot | 14 days |
+| Claim extension grant | +30 days per passed ballot |
+| Ops role term | 180 days |
+| Ops role vote gate | ≥10 completions and ≥5 active reviewers |
+| Removal / ops-role cooldown | 30 days |
+| Removal eligibility floor | ≥10,000 sats confirmed (12 months) |
 | AI prompt / model | `v1` / `claude-sonnet-4-20250514` (env-overridable) |
 | Network | **signet** |
 | Escrow mode (live) | **`single-key-test`** |
+| Parameter community votes | **Not live** (empty stub) |
 
 ---
 
@@ -528,14 +583,14 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 
 | Tier | Command | Risk |
 |------|---------|------|
-| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~191 tests) |
-| Frontend unit | `cd plebly.fund && npm test` | None (~57 tests) |
+| Workers unit/HTTP (mocked) | `cd workers && npm test` | None (~248 tests) |
+| Frontend unit | `cd plebly.fund && npm test` | None (~118 tests) |
 | Proposal schema + fee helpers | `cd proposals && npm run validate:all && npm test` | None |
 | Live read-only smoke | `cd workers && npm run smoke:signet` | None |
 | Mainnet readiness smoke | `cd workers && npm run smoke:mainnet` | None (refuses unless network=mainnet) |
 | Opt-in spend | Manual Sparrow on **your** signet addresses | Signet sats |
 
-Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, **escrow mode hard boundary** (`src/__tests__/escrow-mode.test.ts`: misconfig refuse, allocate mode field, map miss, release refuse in test mode, health capacity), escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility, resolution abuse, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation.
+Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, **escrow mode hard boundary**, escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility + git mirror helpers, **ops role gate/nominate/vote/tally**, **claim extension**, **listing challenge open**, **release `decision_id` binding** + force audit, governance cron early-tally rejection, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation, SPA governance + builder helpers.
 
 ---
 
@@ -546,20 +601,23 @@ Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 
 | Gap | Notes |
 |-----|-------|
-| Operator-owned signet `TEST_*` addresses | Live still uses public BIP39 vector `tb1qacjkk…` — observe only until Sparrow wallet you control is wired |
+| Operator-owned signet `TEST_*` addresses | Live may still use public BIP39 vector — observe only until Sparrow wallet you control is wired |
 | Bootstrap reviewer identities | **Not seeded** (`count: 0`) — `scripts/bootstrap-reviewers.sh` + `REVIEWERS.md` (exactly five final ids; seats permanent) |
 | KEYHOLDERS production xpubs / descriptor | Still TBD; required for `escrow_mode=multisig` (descriptor + map, no `TEST_ESCROW_ADDRESS`) |
 | Mainnet fee address in PARAMETERS | Mainnet still `TBD`; signet CI var set; flip before launch |
 | Signet cannot authorize release | By design: `outcome: completed` → 403 in `single-key-test`; needs multisig mode |
+| Merge removal mirror on proposals `main` | Seed file `docs/governance/reviewer-removals.md` must be on `main` for clean evidence PRs |
 | Descriptor → address derivation in Worker | **v1 deferred** — Sparrow-precomputed `ESCROW_ADDRESS_MAP` only |
 | Multisig PSBT signing in Worker | Never — human keyholders + Sparrow / runbooks |
+| Community parameter votes | Stub only — publish rules in `PARAMETERS.md` before implementing |
 | Anthropic key in production | Unset live (`ai_review: false`); without it AI → ambiguous |
 | X OAuth credentials | Unset live (`x_oauth: false`) |
 | Lightning on signet | **Always off** — auto-on mainnet; LN staging via `BITCOIN_NETWORK=testnet` |
 | Ops suspend of other users | Self-only today |
 | Automated refund batching | **v1 deferred** — register + keyholder batch only |
+| Browser / e2e suite | Unit/HTTP only — no Playwright against live UI |
 
-**Already shipped (not gaps):** escrow mode hard boundary, flip script + mainnet/signet smokes, Pages network vars, Completeness `validate` required on `main`.
+**Already shipped (not gaps):** escrow mode hard boundary; flip script + mainnet/signet smokes; Pages network vars; Completeness `validate` on `main`; reviewer decisions + funder removal; claim extension + listing challenge (API + SPA); ops-role nominate/vote/tally + volume gate; removal git mirrors; cron governance tallies; `decision_id` release binding + force audit.
 
 ---
 
@@ -578,13 +636,22 @@ Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 1. Builder pays bond → site opens claim PR → slot held in KV.
 2. Reviewer merges → cron sets `claimed_at` from `merged_at`.
 3. Checkpoint by day 45 (+grace); deliverable submit → AI first-pass → reviewer ballot (unless clear fail).
-4. Hook outcome `completed` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat; keyholders cosign the on-chain release out-of-band.
+4. Optional: fulfiller requests **30-day claim extension** → reviewers approve → `claim_window_ends_at` moves.
+5. Hook outcome `completed` with `decision_id` of tallied `deliverable_confirm` / `second_review` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat; keyholders cosign the on-chain release out-of-band.
 
-### C. Failure / abandon
+### C. Failure / abandon / listing challenge
 
 1. Window or checkpoint miss → cron forfeits bond, reopen to `claimable`.
-2. Or contributor challenge → accept hook → same reopen path.
+2. Or contributor abandoned-claim challenge → accept hook → same reopen path.
 3. Idle 365d / underfunded window → ballot → extend / refund / redirect.
+4. Eligible funder may **challenge listing** on listed/funding/claimable → reviewer ballot → decline PR on pass.
+
+### D. Governance (reviewers + ops roles)
+
+1. Ops seeds five bootstrap reviewers (permanent).
+2. Reviewers vote open decisions on `/reviewers` and project pages; cron or hook tallies after close.
+3. Eligible funders open/vote removal ballots; evidence/result mirrored to git when App configured.
+4. After volume gate (≥10 completions, ≥5 reviewers), reviewers nominate/vote ops roles (grant/remove/retain). No custody.
 
 ---
 
@@ -595,18 +662,20 @@ Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 | Worker entry + cron | `workers/src/index.ts` |
 | Fee/bond | `workers/src/lib/fee-payment.ts` |
 | Claims | `workers/src/lib/builder-claim.ts`, `claim-lifecycle.ts`, `claim-abuse.ts`, `routes/claims.ts` |
-| Reviewers / decisions | `lib/reviewers.ts`, `lib/review-decisions.ts`, `lib/review-quorum.ts`, `lib/ai-review.ts`, `lib/rebuttal.ts`, `lib/reviewer-removal.ts`, `routes/reviewers.ts` |
+| Reviewers / decisions | `lib/reviewers.ts`, `lib/review-decisions.ts`, `lib/review-quorum.ts`, `lib/ai-review.ts`, `lib/rebuttal.ts`, `lib/reviewer-removal.ts`, `lib/removal-git.ts`, `lib/claim-extension.ts`, `lib/listing-challenge.ts`, `lib/governance-cron.ts`, `routes/reviewers.ts` |
+| Ops roles | `lib/ops-roles.ts`, `lib/ops-role-ballots.ts`, `lib/ops-role-params.ts`, `routes/ops.ts` |
 | Contrib / ballots / refunds | `lib/contrib.ts`, `lib/ballots.ts`, `routes/contributions.ts`, `routes/ballots.ts`, `routes/refunds.ts` |
 | Escrow mode / allocate | `lib/escrow-mode.ts`, `lib/escrow-allocate.ts`, `routes/escrow.ts`, `__tests__/escrow-mode.test.ts` |
 | LN | `lib/claimer.ts`, `lib/boltz.ts`, `routes/lightning.ts` |
 | Auth | `routes/auth.ts` (GitHub, X PKCE, Nostr) |
 | Propose / amend | `workers/src/routes/proposals.ts`, `lib/yaml-fm.ts`, `lib/proposal-deps.ts`, `lib/proposer-match.ts` |
-| Frontend | `plebly.fund/src/{main,router,propose-page,propose-milestones,propose-deps,proposal-page,proposal-ui,builder-panel,review-panel,governance-page,reviewers,fee-pay,github,frontmatter}.ts` |
+| Frontend | `plebly.fund/src/{main,router,propose-page,propose-milestones,propose-deps,proposal-page,proposal-ui,builder-panel,review-panel,listing-challenge-panel,governance-page,reviewers,ops-roles,fee-pay,github,frontmatter,tag-input}.ts` |
 | Schema / CI | `proposals/schema/proposal.schema.json`, `template/proposal.md`, `.github/workflows/completeness.yml`, `.github/workflows/issue-to-proposal.yml` |
 | Embed widget | `workers/src/routes/embed.ts`, `plebly.fund/public/embed.js`, `proposals/docs/embed.md` |
 | Launch ops | `docs/remaining-human-steps.md`, `docs/mainnet-launch-ops.md`, `proposals/scripts/bootstrap-reviewers.sh`, `workers/scripts/flip-to-mainnet.sh` |
 | AI prompts | `proposals/review-prompts/v1.md` |
-| Parameters | `proposals/PARAMETERS.md`, `proposals/REVIEWERS.md`, `proposals/KEYHOLDERS.md`, `workers/src/lib/claim-params.ts`, `reviewer-params.ts` |
+| Governance mirror | `proposals/docs/governance/reviewer-removals.md` |
+| Parameters | `proposals/PARAMETERS.md`, `proposals/REVIEWERS.md`, `proposals/KEYHOLDERS.md`, `workers/src/lib/claim-params.ts`, `reviewer-params.ts`, `ops-role-params.ts` |
 
 ---
 

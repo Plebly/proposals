@@ -1,49 +1,48 @@
 # Remaining human steps — signet, then mainnet
 
-**Date:** 2026-07-25  
+**Date:** 2026-07-26  
 **Audience:** ops / keyholders / whoever will run live money-path tests  
-**Code status:** Workers `1341574` + SPA on **signet**; escrow mode hard boundary is live (`escrow_mode: single-key-test`). Automated tests and read-only smoke pass. This doc is only what humans still must do.
+**Code status:** Reviewer + ops-role governance, claim extension, listing challenge, removal git mirrors, and `decision_id`-bound completed outcomes are in code. Live deploy is still **signet** / `escrow_mode: single-key-test` until you flip. This doc is **only** what humans still must do.
 
-Related: [`system-as-implemented.md`](system-as-implemented.md), [`post-mvp-roadmap.md`](post-mvp-roadmap.md) (after MVP — types, events, discovery, SEO), [`mainnet-launch-ops.md`](mainnet-launch-ops.md), [`TESTING.md`](../proposals/TESTING.md), [`KEYHOLDERS.md`](../proposals/KEYHOLDERS.md).
+Related: [`system-as-implemented.md`](system-as-implemented.md), [`post-mvp-roadmap.md`](post-mvp-roadmap.md), [`mainnet-launch-ops.md`](mainnet-launch-ops.md), [`TESTING.md`](../proposals/TESTING.md), [`KEYHOLDERS.md`](../proposals/KEYHOLDERS.md), [`REVIEWERS.md`](../proposals/REVIEWERS.md).
 
 ### After MVP
 
-Launch blockers stay in this checklist. Product expansion (proposal types, events, tags, stable URLs, homepage rails, etc.) is tracked in [`post-mvp-roadmap.md`](post-mvp-roadmap.md) — do not conflate with Part A/B human ops.
+Launch blockers stay in this checklist. Product expansion beyond governance is in [`post-mvp-roadmap.md`](post-mvp-roadmap.md). **Parameter votes** stay deferred until eligibility / quorum / activation rules are published in `PARAMETERS.md`.
 
 ---
 
-## What is already done (do not redo)
+## What code already does (do not redo)
 
 - Workers API + SPA on **signet** (mempool signet, GitHub App/OAuth)
-- Fee CI vars + `validate` required on `Plebly/proposals` `main`
-- Network-safe fee address selection (`TEST_SUBMISSION_FEE_ADDRESS` on signet; `SUBMISSION_FEE_ADDRESS` on mainnet)
-- Lightning **always off** on signet (no Boltz pair)
-- Escrow **hard mode boundary** (`lib/escrow-mode.ts`):
-  - `single-key-test` vs `multisig` vs misconfigured (503 refuse)
-  - allocate responses include `escrow_mode`
-  - `/health` reports mode + map capacity fields
-  - `POST /claims/outcome` `completed` **refused** in single-key-test (`multisig_required_for_release`)
-- Flip tooling: `workers/scripts/flip-to-mainnet.sh`, `npm run smoke:signet`, `npm run smoke:mainnet`
-- Pages build env from repo vars (`VITE_BITCOIN_NETWORK`, etc.)
+- Escrow hard mode boundary (`single-key-test` | `multisig` | refuse)
+- Reviewer bootstrap / earn / funder removal / decision quorum
+- Ops roles: nominate / vote / tally (volume-gated; no custody)
+- Claim extension request UI + +30d on approve
+- Listing challenge UI (eligible funder → reviewer ballot → decline PR)
+- Removal ballots mirrored to git (`docs/governance/reviewer-removals.md`, fallback `REVIEWERS.md`)
+- `POST /claims/outcome` `completed` binds to tallied `deliverable_confirm` / `second_review` via `decision_id` (or audited `force:true`)
+- Cron auto-tallies expired review / removal / ops-role ballots
+- Flip tooling: `workers/scripts/flip-to-mainnet.sh`, smoke scripts
 
 Live check:
 
 ```bash
 curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq '{ok,network,escrow_mode,escrow_descriptor_set,escrow_map_remaining,lightning_enabled}'
-# expect: ok=true, network=signet, escrow_mode=single-key-test, escrow_descriptor_set=false
+# expect today: ok=true, network=signet, escrow_mode=single-key-test, escrow_descriptor_set=false
 ```
 
 ---
 
 ## Part A — Full signet testing (human)
 
-Deployed mode is **`escrow_mode: single-key-test`**. Allocate returns one shared `TEST_ESCROW_ADDRESS` and labels every response. Workers do not hold that key.
+Deployed mode is **`escrow_mode: single-key-test`**. Allocate returns one shared `TEST_ESCROW_ADDRESS`. Workers do not hold that key.
 
-**Important limit:** you can rehearse fee → submit → allocate → fund → claim → deliverable → review ballots on signet, but you **cannot** authorize disbursement via `POST /claims/outcome` `completed` until multisig mode is configured. That is intentional so the test shortcut cannot release funds.
+**Important limit:** you can rehearse fee → submit → allocate → fund → claim → deliverable → review / extension / listing-challenge ballots on signet, but you **cannot** authorize disbursement via `POST /claims/outcome` `completed` until multisig mode is configured.
 
 ### A1. Wallet you control (required for any spend)
 
-The live deploy still points at the public BIP39 test-vector address `tb1qacjkk…`. Observe-only unless you control that key (you almost certainly do not).
+The live deploy may still point at a public BIP39 test-vector address. Observe-only unless you control that key.
 
 1. Sparrow → Network → **Signet** → create or open a wallet (private keys stay local).
 2. Copy two receive addresses (or reuse one): escrow + fee/bond.
@@ -74,15 +73,29 @@ The live deploy still points at the public BIP39 test-vector address `tb1qacjkk�
 | Claim floor | Fund escrow to **≥ 100,000** sats confirmed | Or temporarily lower floor on a test branch only |
 | Claim bond | Exact **10,000** sats bond, claim in UI | Bond spent at verify even if PR never merges |
 | Deliverable + review | Submit deliverable; vote ballots | Needs reviewers (A3) |
-| **Completed / release** | **Blocked on purpose** | `outcome: completed` → 403 until multisig mode |
+| Extension (optional) | Fulfiller → **Request 30-day extension** on project | Reviewers approve; confirm `claim_window_ends_at` moves |
+| Listing challenge (optional) | Eligible funder on listed/funding/claimable | Opens reviewer ballot; on pass → decline PR |
+| Removal (optional) | Eligible funder on `/reviewers` | Evidence + result PRs to `docs/governance/reviewer-removals.md` |
+| **Completed / release** | Hook with `decision_id` of tallied approve | **Blocked** until multisig: `outcome: completed` → 403 |
 
 Read-only anytime: `cd workers && npm run smoke:signet`.
 
-### A3. Reviewer quorum (required for review e2e)
+Completed outcome shape (once multisig):
 
-Live roster is empty (`GET /reviewers` → `count: 0`). Seats are permanent once seeded.
+```bash
+curl -sS -X POST "$API/claims/outcome" \
+  -H "X-Plebly-Hook-Secret: $HOOK_SECRET" \
+  -H "content-type: application/json" \
+  -d '{"proposal_id":"…","outcome":"completed","decision_id":"…-deliverable_confirm-r1-…"}'
+```
 
-1. Choose **exactly five** user ids (`github:{login}`, `x:{id}`, or `nostr:{pubkey}`).
+`force: true` still works for ops escape and writes `forceoutcome:*` audit rows — avoid on real money.
+
+### A3. Reviewer quorum (required for review e2e) — YOU
+
+Live roster is empty until you seed. Seats are **permanent**.
+
+1. Choose **exactly five** final user ids (`github:{login}`, `x:{id}`, or `nostr:{pubkey}`).
 2. Seed:
    ```bash
    cd proposals
@@ -91,8 +104,19 @@ Live roster is empty (`GET /reviewers` → `count: 0`). Seats are permanent once
    ./scripts/bootstrap-reviewers.sh \
      'github:…' 'github:…' 'github:…' 'github:…' 'github:…'
    ```
-3. Mirror into `REVIEWERS.md` via PR.
-4. Confirm `count: 5`.
+3. Mirror into `REVIEWERS.md` via PR (fill the bootstrap table).
+4. Confirm `GET /reviewers` → `count: 5`.
+
+Optional ops seats (coordination labels only):
+
+```bash
+curl -sS -X POST "$API/ops/roles/bootstrap" \
+  -H "X-Plebly-Hook-Secret: $HOOK_SECRET" \
+  -H "content-type: application/json" \
+  -d '{"user_ids":["github:…","github:…"]}'
+```
+
+Role **votes** stay gated until ≥10 platform completions and ≥5 active reviewers.
 
 ### A4. Optional signet completeness
 
@@ -101,6 +125,7 @@ Live roster is empty (`GET /reviewers` → `count: 0`). Seats are permanent once
 | `ANTHROPIC_API_KEY` | AI first-pass; else ambiguous | `npx wrangler secret put ANTHROPIC_API_KEY` |
 | X OAuth | X login | `X_CLIENT_ID` / `X_CLIENT_SECRET` |
 | Operator-owned demo listing | Spend against a project you control | Update/list with your escrow |
+| Merge `docs/governance/reviewer-removals.md` | First removal evidence PR has a stable target | Already added in proposals tree — merge to `main` |
 
 ### A5. Optional: signet multisig rehearsal (separate from default deploy)
 
@@ -110,7 +135,7 @@ Default signet is **not** a 3-of-5 dress rehearsal. To rehearse multisig **befor
 2. **Remove** `TEST_ESCROW_ADDRESS` from Worker vars.
 3. Set secrets `ESCROW_DESCRIPTOR` + `ESCROW_ADDRESS_MAP`.
 4. Redeploy; `/health` must show `escrow_mode=multisig`, `escrow_map_remaining > 0`, `escrow_test_address_set=false`.
-5. Allocate (per-index addresses), then `outcome: completed` is allowed by the Worker gate.
+5. Allocate (per-index addresses), then `outcome: completed` with `decision_id` is allowed by the Worker gate.
 6. Actual cosign / broadcast of the release tx remains a human Sparrow operation.
 
 Lightning still needs `BITCOIN_NETWORK=testnet` (or mainnet); Boltz has no signet pair.
@@ -128,17 +153,20 @@ Do not flip until Part A spend path and reviewer bootstrap are acceptable. Flip 
 3. GitHub vars on `Plebly/proposals`: `SUBMISSION_FEE_ADDRESS`, `BITCOIN_NETWORK=mainnet`, `MEMPOOL_API=https://mempool.space/api`
 4. Confirm fee gate on PRs no longer skips
 
-### B2. Keyholders + escrow map
+### B2. Keyholders + escrow map — YOU (cannot be automated)
 
-1. Fill production roster + 3-of-5 descriptor in `KEYHOLDERS.md`.
-2. Sparrow-derive receive addresses for indices you will allocate (`0`, `1`, …).
-3. Secrets: `ESCROW_DESCRIPTOR`, `ESCROW_ADDRESS_MAP` (`{"0":"bc1…",…}`).
-4. **Remove** `TEST_ESCROW_ADDRESS` / `TEST_SUBMISSION_FEE_ADDRESS` from `wrangler.toml` vars (flip script comments them out).
-5. Watch `/health` `escrow_map_remaining`; refresh the map before exhaustion (`escrow_map_exhausted`).
+1. Name **five** keyholders; ≥2 hold no other formal Plebly role.
+2. Fill production roster + 3-of-5 descriptor / xpubs in `KEYHOLDERS.md`.
+3. Sparrow-derive receive addresses for indices you will allocate (`0`, `1`, …).
+4. Secrets: `ESCROW_DESCRIPTOR`, `ESCROW_ADDRESS_MAP` (`{"0":"bc1…",…}`).
+5. **Remove** `TEST_ESCROW_ADDRESS` / `TEST_SUBMISSION_FEE_ADDRESS` from Worker vars.
+6. Watch `/health` `escrow_map_remaining`; refresh the map before exhaustion.
+
+Keyholders stay **out of band forever** (Sparrow). There is no Worker election UI for keys — by design.
 
 ### B3. Bootstrap reviewers
 
-Same five-seat rule if not already seeded with identities you will keep on mainnet.
+Same five-seat rule if not already seeded with identities you will keep on mainnet. Do **not** reseed with different ids (rejected once five bootstrap seats exist).
 
 ### B4. Flip + verify
 
@@ -156,10 +184,10 @@ Confirm:
 |-------|--------|
 | `/health` | `network=mainnet`, `escrow_mode=multisig`, `escrow_ready=true`, `escrow_descriptor_set=true`, `escrow_test_address_set=false`, `escrow_map_remaining≥1`, `lightning_enabled=true` (unless forced off) |
 | `/claims/params` | fee address `bc1…` (not `tb1…`) |
-| Pages | `VITE_BITCOIN_NETWORK=mainnet` rebuild |
+| Pages | `VITE_BITCOIN_NETWORK=mainnet` rebuild + deploy |
 | Allocate | `escrow_mode: "multisig"`, unique map address |
 | First LN smoke | Small amount you accept losing to Boltz fees |
-| First `outcome: completed` | Allowed by Worker; cosign release in Sparrow |
+| First `outcome: completed` | Includes `decision_id`; cosign release in Sparrow |
 
 ### B5. Soft / deferred (not v1 launch blockers)
 
@@ -167,7 +195,9 @@ Confirm:
 |------|--------|
 | In-Worker descriptor → address derive | Deferred — Sparrow map |
 | Automated refund batching | Deferred — register + keyholder batch |
-| Multisig PSBT signing in Worker | Never — human cosign + runbooks |
+| Multisig PSBT signing in Worker | **Never** — human cosign + runbooks |
+| Community parameter votes | Deferred — publish rules in `PARAMETERS.md` first |
+| Keyholder replacement process | Human / Q21 stall runbook only |
 
 ---
 
@@ -176,23 +206,26 @@ Confirm:
 **Signet (now)**  
 1. Your Sparrow signet wallet → replace `TEST_*` → redeploy → confirm `escrow_mode=single-key-test`  
 2. Faucet + exact fee/bond + fund escrow to claim floor  
-3. Bootstrap five reviewers  
-4. Optional: Anthropic key  
-5. Remember: no `completed` release until multisig mode  
+3. **Bootstrap five reviewers** (blocker for any human quorum)  
+4. Merge `docs/governance/reviewer-removals.md` on proposals `main`  
+5. Optional: Anthropic key; exercise extension + listing challenge + removal  
+6. Remember: no `completed` release until multisig mode  
 
 **Mainnet (later)**  
-1. KEYHOLDERS + Sparrow map; remove `TEST_ESCROW_ADDRESS`  
+1. **KEYHOLDERS** + Sparrow map; remove `TEST_ESCROW_ADDRESS`  
 2. Mainnet fee in PARAMETERS + secrets/vars  
 3. `flip-to-mainnet.sh` + `smoke:mainnet` (`escrow_mode=multisig`)  
-4. First allocate + LN smoke + real cosigned release  
+4. First allocate + LN smoke + real cosigned release with `decision_id`  
 
 ---
 
 ## Explicit non-goals for humans right now
 
-- Do not invent KEYHOLDERS xpubs in git  
+- Do not invent KEYHOLDERS xpubs in git without a real ceremony  
 - Do not seed bootstrap with throwaway ids (seats are permanent)  
-- Do not fund the public `tb1qacjkk…` vector unless you control that seed  
+- Do not fund a public test-vector address unless you control that seed  
 - Do not expect Lightning on the default signet deploy  
 - Do not set `TEST_ESCROW_ADDRESS` together with descriptor/map (Worker refuses all traffic)  
 - Do not expect `outcome: completed` to succeed while `escrow_mode=single-key-test`  
+- Do not use `force: true` on real money without a written incident note (it is audited in KV only)  
+- Do not expect parameter-change ballots — not live by design  
