@@ -13,18 +13,21 @@ Install the **Plebly** GitHub App on any repository to turn an issue into a Pleb
 
 ## Worker / App configuration
 
-| Secret / var | Purpose |
-|--------------|---------|
-| `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` | App credentials |
-| `GITHUB_APP_INSTALLATION_ID` | Bootstrap install for `Plebly/proposals` |
-| `GITHUB_WEBHOOK_SECRET` | HMAC for `POST /github/webhook` |
-| `vars.PLEBLY_BRIDGE_WEBHOOK=1` on `Plebly/proposals` | Disables the same-repo Action so only the Worker drafts |
+| Secret / var | Purpose | Status (2026-07-27) |
+|--------------|---------|---------------------|
+| `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` | App credentials | Set on Worker |
+| `GITHUB_APP_INSTALLATION_ID` | Bootstrap install for `Plebly/proposals` | Set on Worker |
+| `GITHUB_WEBHOOK_SECRET` | HMAC for `POST /github/webhook` | Set on Worker — paste the same value into the App webhook “Secret” field |
+| `vars.PLEBLY_BRIDGE_WEBHOOK=1` on `Plebly/proposals` | Disables the same-repo Action so only the Worker drafts | Set |
+| Labels `plebly` / `plebly-proposal` on `Plebly/proposals` | Same-repo triggers | Created |
 
-Webhook URL: `https://plebly-api.securesovereigns.workers.dev/github/webhook`
+Webhook URL (paste into App settings): `https://plebly-api.securesovereigns.workers.dev/github/webhook`
 
 Events: `installation`, `installation_repositories`, `issues`, `issue_comment`.
 
 Permissions: **Issues** (read/write) on customer installs; **Contents** + **Pull requests** on the proposals install (same App permission set applies everywhere).
+
+Still human: make the App public/optional (or installable), set webhook URL + secret in the GitHub App UI, install on at least one non-`Plebly/proposals` test repo.
 
 ## Authz
 
