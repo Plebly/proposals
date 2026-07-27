@@ -1,0 +1,25 @@
+name: Allocate escrow on list merge
+
+# When a proposal lands under proposals/listed/ without an escrow_address,
+# call the Worker allocate hook so funding-window fields are written via PR.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "proposals/listed/**"
+
+jobs:
+  allocate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Allocate missing escrows
+        env:
+          PLEBLY_HOOK_SECRET: ${{ secrets.PLEBLY_HOOK_SECRET }}
+          PLEBLY_API_URL: ${{ vars.PLEBLY_API_URL }}
+        run: node scripts/allocate-on-merge.mjs

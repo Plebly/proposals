@@ -21,7 +21,11 @@ Launch blockers stay in this checklist. Product expansion beyond governance is i
 - Claim extension request UI + +30d on approve
 - Listing challenge UI (eligible funder → reviewer ballot → decline PR)
 - Removal ballots mirrored to git (`docs/governance/reviewer-removals.md`, fallback `REVIEWERS.md`)
-- `POST /claims/outcome` `completed` binds to tallied `deliverable_confirm` / `second_review` via `decision_id` (or audited `force:true`)
+- `POST /claims/outcome` `completed` binds to tallied `deliverable_confirm` / `second_review` via `decision_id` (or audited `force:true` with `force_note`; mainnet also needs `ALLOW_FORCE_OUTCOME=true`)
+- Claim extension is one-shot (+30d); funding-window `extend` ballot is one-shot (+90d)
+- Platform fee: completed outcome returns `platform_fee` advisory (2.5%) for keyholders
+- SPA `/declined` archive + funder contributor badges when amounts are public
+- Allocate-on-merge workflow + `SEQUENCE.md` for numeric IDs (set `secrets.PLEBLY_HOOK_SECRET` + `vars.PLEBLY_API_URL`)
 - Cron auto-tallies expired review / removal / ops-role ballots
 - Flip tooling: `workers/scripts/flip-to-mainnet.sh`, smoke scripts
 
@@ -89,7 +93,7 @@ curl -sS -X POST "$API/claims/outcome" \
   -d '{"proposal_id":"…","outcome":"completed","decision_id":"…-deliverable_confirm-r1-…"}'
 ```
 
-`force: true` still works for ops escape and writes `forceoutcome:*` audit rows — avoid on real money.
+`force: true` requires `force_note` (≥8 chars) and writes `forceoutcome:*` audit rows. On mainnet it also needs Worker var `ALLOW_FORCE_OUTCOME=true`. Avoid on real money.
 
 ### A3. Reviewer quorum (required for review e2e) — YOU
 
@@ -126,6 +130,9 @@ Role **votes** stay gated until ≥10 platform completions and ≥5 active revie
 | X OAuth | X login | `X_CLIENT_ID` / `X_CLIENT_SECRET` |
 | Operator-owned demo listing | Spend against a project you control | Update/list with your escrow |
 | Merge `docs/governance/reviewer-removals.md` | First removal evidence PR has a stable target | Already added in proposals tree — merge to `main` |
+| Dedicated signet fee receive | Split fees from smoke escrow balance | New Sparrow receive → `TEST_SUBMISSION_FEE_ADDRESS` + CI var |
+| Allocate-on-merge secrets | Auto escrow after list merge | `secrets.PLEBLY_HOOK_SECRET` + `vars.PLEBLY_API_URL` on Plebly/proposals |
+| Nostr event fanout | Optional ops broadcast | `NOSTR_OPS_NSEC` Worker secret |
 
 ### A5. Optional: signet multisig rehearsal (separate from default deploy)
 

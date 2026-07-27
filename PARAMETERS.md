@@ -33,7 +33,7 @@ Community parameter votes are not live. Any future ballot system is volume-gated
 | Completion finality confirmations | 3 |
 | Core annual gap | 2,100,000 sats |
 
-Fee/bond receive address remains TBD until ops wallet is published (Workers: `SUBMISSION_FEE_ADDRESS` / signet `TEST_SUBMISSION_FEE_ADDRESS`; CI: repo var `SUBMISSION_FEE_ADDRESS`).
+Signet fee/bond receive (live): `tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz` (Workers `TEST_SUBMISSION_FEE_ADDRESS`, CI `vars.SUBMISSION_FEE_ADDRESS`). Mainnet fee address remains TBD until ops publishes a `bc1…` (Workers `SUBMISSION_FEE_ADDRESS`).
 
 ## Claim abuse mitigations (provisional)
 
@@ -66,8 +66,9 @@ Temporary claim suspension may be set for: bond fraud, fee/bond txid replay, or 
 
 | Role | Address / descriptor |
 |------|----------------------|
-| Submission fee | `TBD` (mainnet) — signet CI/testing uses `tb1qacjkkdgkrm7fc50kws0740cdcnw78xynxgn8p5` via repo var / `TEST_SUBMISSION_FEE_ADDRESS` |
-| Platform ops (fee receive) | `TBD` |
+| Submission fee (signet) | `tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz` — currently **shared** with smoke-demo escrow receive; split to a dedicated Sparrow receive when ready |
+| Submission fee (mainnet) | `TBD` (`bc1…`) |
+| Platform ops (fee receive) | Same as submission fee unless published separately (2.5% at disbursement is keyholder-enforced; Worker returns advisory sats) |
 | Claim bond receive | Same as submission fee unless published separately |
 | Escrow receive descriptor template | See `KEYHOLDERS.md` |
 

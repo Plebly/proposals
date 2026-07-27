@@ -10,10 +10,11 @@
  *   MEMPOOL_API — e.g. https://mempool.space/signet/api or https://mempool.space/api
  *   BITCOIN_NETWORK — signet | mainnet (affects confirmed requirement)
  *
- * Signet note: all-zero submission_fee_txid is allowed as a seed/demo placeholder
- * (same convention as proposals/listed/demo-signet-smoke.md). Mainnet rejects it.
+ * Signet note: all-zero submission_fee_txid is allowed only for the seed/demo
+ * allowlist below. New listings need a real 10k payment. Mainnet rejects zeros.
  */
 import fs from "node:fs";
+import path from "node:path";
 import matter from "gray-matter";
 
 const feeAddress = (process.env.SUBMISSION_FEE_ADDRESS || "").trim();
@@ -26,6 +27,16 @@ const mempoolApi = (
     : "https://mempool.space/signet/api")
 ).replace(/\/$/, "");
 const mainnet = (process.env.BITCOIN_NETWORK || "signet") === "mainnet";
+
+/** Basename allowlist for historical seed demos (signet only). */
+const ZERO_TXID_ALLOWLIST = new Set([
+  "demo-signet-smoke.md",
+  "knots-size-value-spam.md",
+]);
+
+function allowsZeroFeeTxid(file) {
+  return ZERO_TXID_ALLOWLIST.has(path.basename(file));
+}
 
 const files = process.argv.slice(2).filter((f) => f.endsWith(".md"));
 
@@ -62,11 +73,14 @@ for (const file of files) {
 
   if (data.submission_fee_txid) {
     const txid = String(data.submission_fee_txid);
-    // All-zero placeholder matches listed seed demos (e.g. demo-signet-smoke).
-    // Allowed on signet only while the fee address is still the observe-only test vector.
     if (/^0{64}$/.test(txid)) {
       if (mainnet) {
         console.error(`${file}: zero submission_fee_txid not allowed on mainnet`);
+        failed++;
+      } else if (!allowsZeroFeeTxid(file)) {
+        console.error(
+          `${file}: zero submission_fee_txid only allowed for seed demos (${[...ZERO_TXID_ALLOWLIST].join(", ")}) — pay exact ${feeSats} sats to ${feeAddress}`,
+        );
         failed++;
       } else {
         console.warn(

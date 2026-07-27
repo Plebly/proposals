@@ -375,9 +375,19 @@ Any active reviewer: `POST /reviewers/decisions/:id/dissent` → GitHub App PR a
 ### Claim extension
 
 - Session: fulfiller `POST /reviewers/decisions/request-extension` `{ proposal_path }` while status is `claimed` or `in_review` → opens `claim_extension` decision.
-- On passed tally: `grantClaimExtension` adds **+30 days** in `claimext:{proposalId}` (cumulative).
+- On passed tally: `grantClaimExtension` adds a **single +30 days** in `claimext:{proposalId}` (no stacking; second grant is a no-op).
+- Request gate: `POST …/request-extension` returns `409 claim_extension_used` if already granted.
 - Claim window end: `claimWindowEnd(claimed_at, extraDays)`; `GET` claim status exposes `claim_window_ends_at`.
 - SPA: fulfiller **Request 30-day extension** on project Build panel (`builder-panel.ts`).
+
+### Funding-window extension (Q5)
+
+- Contributor ballot winner `extend` on `underfunded` / `idle_claimable` → `grantFundingExtension` (+90d, one-shot) and PR-patch `funding_window_ends_at` (+ restore `listed`).
+- Record: `fundext:{proposalId}` in USERS KV.
+
+### Platform fee (2.5%)
+
+- Worker never moves funds. On `completed` outcome, response includes `platform_fee` advisory (`platform_fee_sats`, `fulfiller_sats`, ops address) for keyholder disbursement.
 
 ### Listing challenge
 
@@ -385,6 +395,7 @@ Any active reviewer: `POST /reviewers/decisions/:id/dissent` → GitHub App PR a
 - Opens `listing_challenge` reviewer decision; rationale stored at `listchal:{decisionId}`.
 - On passed tally: GitHub App PR moves proposal toward `declined/` with status `declined`.
 - SPA: sidebar **Challenge listing** panel on those statuses (`listing-challenge-panel.ts`); open ballots also appear on `/reviewers`.
+- Archive: SPA `/declined` lists `declined` / `declined_fundable` proposals.
 
 ### Reviewer removal (funders)
 
