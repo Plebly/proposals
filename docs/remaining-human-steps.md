@@ -138,14 +138,13 @@ Role **votes** stay gated until ≥10 platform completions and ≥5 active revie
 
 | Item | Why | How |
 |------|-----|-----|
-| Merge [proposals#7](https://github.com/Plebly/proposals/pull/7) | Removals mirror, SEQUENCE, allocate-on-merge, PARAMETERS/fee-gate | Review + merge to `main` |
 | Dedicated signet fee receive | Split fees from smoke escrow balance | New Sparrow receive → `TEST_SUBMISSION_FEE_ADDRESS` + CI `vars.SUBMISSION_FEE_ADDRESS` |
-| Allocate-on-merge secrets | Auto escrow after list merge | After #7: `secrets.PLEBLY_HOOK_SECRET` + `vars.PLEBLY_API_URL` on Plebly/proposals |
+| Allocate-on-merge secrets | Auto escrow after list merge | `vars.PLEBLY_API_URL` set; still need `secrets.PLEBLY_HOOK_SECRET` (= Worker `HOOK_SECRET`) on Plebly/proposals |
 | `ANTHROPIC_API_KEY` | AI first-pass; else ambiguous | `npx wrangler secret put ANTHROPIC_API_KEY` |
 | X OAuth | X login | `X_CLIENT_ID` / `X_CLIENT_SECRET` |
 | Nostr event fanout | Optional ops broadcast | `NOSTR_OPS_NSEC` Worker secret |
 | Replace seed zero fee txids | Before mainnet | Real 10k payments on demo listings (CI allowlist is signet-only) |
-| GitHub bridge App (cross-repo) | Other projects label → Plebly draft | Publish App; set `GITHUB_WEBHOOK_SECRET`; install on test repo; set `vars.PLEBLY_BRIDGE_WEBHOOK=1` on proposals — see [`github-bridge.md`](github-bridge.md) |
+| GitHub bridge App (cross-repo) | Other projects label → Plebly draft | Worker secret + `vars.PLEBLY_BRIDGE_WEBHOOK=1` + labels on proposals are done. Still: point App webhook URL/secret at Worker (secret in `/tmp/plebly-github-webhook-secret.txt` until pasted), publish/optional install, install on a test repo — see [`github-bridge.md`](github-bridge.md) |
 
 ### A5. Optional: signet multisig rehearsal (separate from default deploy)
 
