@@ -13,7 +13,8 @@ jobs:
   draft-proposal:
     if: >-
       github.event.action == 'labeled' &&
-      (github.event.label.name == 'plebly-proposal' || github.event.label.name == 'plebly')
+      (github.event.label.name == 'plebly-proposal' || github.event.label.name == 'plebly') &&
+      vars.PLEBLY_BRIDGE_WEBHOOK != '1'
     runs-on: ubuntu-latest
     steps:
       - name: Create draft proposal pull request

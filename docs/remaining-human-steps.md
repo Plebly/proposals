@@ -1,8 +1,8 @@
 # Remaining human steps — signet, then mainnet
 
-**Date:** 2026-07-26  
+**Date:** 2026-07-27  
 **Audience:** ops / keyholders / whoever will run live money-path tests  
-**Code status:** Reviewer + ops-role governance, claim extension, listing challenge, removal git mirrors, and `decision_id`-bound completed outcomes are in code. Live deploy is still **signet** / `escrow_mode: single-key-test` until you flip. This doc is **only** what humans still must do.
+**Code status:** High + soft-launch product gaps that can be fixed in code are shipped (Workers + SPA on `main`). Live deploy is still **signet** / `escrow_mode: single-key-test` until you flip. Protocol-repo leftovers land via [Plebly/proposals#7](https://github.com/Plebly/proposals/pull/7). This doc is **only** what humans still must do.
 
 Related: [`system-as-implemented.md`](system-as-implemented.md), [`post-mvp-roadmap.md`](post-mvp-roadmap.md), [`mainnet-launch-ops.md`](mainnet-launch-ops.md), [`TESTING.md`](../proposals/TESTING.md), [`KEYHOLDERS.md`](../proposals/KEYHOLDERS.md), [`REVIEWERS.md`](../proposals/REVIEWERS.md).
 
@@ -16,45 +16,55 @@ Launch blockers stay in this checklist. Product expansion beyond governance is i
 
 - Workers API + SPA on **signet** (mempool signet, GitHub App/OAuth)
 - Escrow hard mode boundary (`single-key-test` | `multisig` | refuse)
+- Live `TEST_*` addresses point at **operator Sparrow signet receives** (listed demos updated; [PR #6](https://github.com/Plebly/proposals/pull/6) on `main`)
 - Reviewer bootstrap / earn / funder removal / decision quorum
 - Ops roles: nominate / vote / tally (volume-gated; no custody)
-- Claim extension request UI + +30d on approve
+- Claim extension request UI + **one-shot** +30d on approve (no stacking; `409` if reused)
+- Funding-window `extend` ballot → **one-shot** +90d (`fundext:`)
 - Listing challenge UI (eligible funder → reviewer ballot → decline PR)
-- Removal ballots mirrored to git (`docs/governance/reviewer-removals.md`, fallback `REVIEWERS.md`)
-- `POST /claims/outcome` `completed` binds to tallied `deliverable_confirm` / `second_review` via `decision_id` (or audited `force:true` with `force_note`; mainnet also needs `ALLOW_FORCE_OUTCOME=true`)
-- Claim extension is one-shot (+30d); funding-window `extend` ballot is one-shot (+90d)
-- Platform fee: completed outcome returns `platform_fee` advisory (2.5%) for keyholders
-- SPA `/declined` archive + funder contributor badges when amounts are public
-- Allocate-on-merge workflow + `SEQUENCE.md` for numeric IDs (set `secrets.PLEBLY_HOOK_SECRET` + `vars.PLEBLY_API_URL`)
+- SPA `/declined` archive + funder contributor badges (when amount is public)
+- Platform fee: `completed` outcome returns `platform_fee` advisory (2.5%) for keyholders
+- `POST /claims/outcome` `completed` binds to tallied `deliverable_confirm` / `second_review` via `decision_id` (or audited `force:true` + `force_note`; mainnet also needs `ALLOW_FORCE_OUTCOME=true`)
 - Cron auto-tallies expired review / removal / ops-role ballots
 - Flip tooling: `workers/scripts/flip-to-mainnet.sh`, smoke scripts
+
+**Pending merge onto proposals `main` ([PR #7](https://github.com/Plebly/proposals/pull/7)):**
+
+- `docs/governance/reviewer-removals.md` seed (removal evidence/result PRs fall back to `REVIEWERS.md` until then)
+- `SEQUENCE.md` + `scripts/assign-sequence.mjs`
+- Allocate-on-merge workflow/script (needs secrets after merge — see A4)
+- PARAMETERS signet fee string alignment + all-zero fee-txid allowlist for seed demos only
 
 Live check:
 
 ```bash
-curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq '{ok,network,escrow_mode,escrow_descriptor_set,escrow_map_remaining,lightning_enabled}'
-# expect today: ok=true, network=signet, escrow_mode=single-key-test, escrow_descriptor_set=false
+curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq '{ok,network,escrow_mode,escrow_ready,escrow_descriptor_set,escrow_test_address_set,lightning_enabled,ai_review,x_oauth,mainnet_secrets_present}'
+# expect today: ok=true, network=signet, escrow_mode=single-key-test,
+#               escrow_ready=true, escrow_test_address_set=true, lightning_enabled=false,
+#               ai_review=false, x_oauth=false, mainnet_secrets_present=false
+curl -sS https://plebly-api.securesovereigns.workers.dev/reviewers | jq .count
+# expect: 0 until you bootstrap
 ```
 
 ---
 
 ## Part A — Full signet testing (human)
 
-Deployed mode is **`escrow_mode: single-key-test`**. Allocate returns one shared `TEST_ESCROW_ADDRESS`. Workers do not hold that key.
+Deployed mode is **`escrow_mode: single-key-test`**. Allocate returns the shared `TEST_ESCROW_ADDRESS` (`tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz`). Workers do not hold that key.
 
 **Important limit:** you can rehearse fee → submit → allocate → fund → claim → deliverable → review / extension / listing-challenge ballots on signet, but you **cannot** authorize disbursement via `POST /claims/outcome` `completed` until multisig mode is configured.
 
 ### A1. Wallet you control (required for any spend)
 
-The live deploy may still point at a public BIP39 test-vector address. Observe-only unless you control that key.
+Listed demos and Worker `TEST_*` already use **your** Sparrow signet receives (smoke + Knots). Fee currently **shares** the smoke escrow receive — split when ready (A4).
 
-1. Sparrow → Network → **Signet** → create or open a wallet (private keys stay local).
-2. Copy two receive addresses (or reuse one): escrow + fee/bond.
-3. Set **only** test vars (do **not** set `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP` or the Worker becomes misconfigured):
+1. Sparrow → Network → **Signet** → wallet that owns the live receives (keys stay local).
+2. Optional: create a **dedicated** fee/bond receive (recommended before serious rehearsal accounting).
+3. If you change addresses, set **only** test vars (do **not** set `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP` or the Worker becomes misconfigured):
    ```toml
    BITCOIN_NETWORK = "signet"
    TEST_ESCROW_ADDRESS = "tb1…your_escrow…"
-   TEST_SUBMISSION_FEE_ADDRESS = "tb1…your_fee…"
+   TEST_SUBMISSION_FEE_ADDRESS = "tb1…your_fee…"   # prefer ≠ escrow
    ```
 4. Deploy and confirm mode:
    ```bash
@@ -63,7 +73,7 @@ The live deploy may still point at a public BIP39 test-vector address. Observe-o
    # expect escrow_mode=single-key-test, escrow_ready=true, lightning_enabled=false,
    #        escrow_config_error=null, escrow_descriptor_set=false
    ```
-5. Point the demo (or a new listing) `escrow_address` at your escrow address before funding it.
+5. Keep listed demo `escrow_address` fields aligned with Sparrow (already done for smoke + Knots).
 6. Faucet fund fee + escrow addresses as needed.
 
 ### A2. Money-path rehearsal (opt-in spend)
@@ -72,14 +82,14 @@ The live deploy may still point at a public BIP39 test-vector address. Observe-o
 |------|-------------|--------|
 | Submission fee | Exact **10,000** sats to `TEST_SUBMISSION_FEE_ADDRESS`, keep txid | One-time `paytxid` |
 | Submit / amend | Log in on plebly.fund | GitHub session |
-| Allocate | Hook `POST /escrow/allocate` | Response must show `escrow_mode: "single-key-test"` |
+| Allocate | Hook `POST /escrow/allocate` (or post-merge workflow once #7 + secrets) | Response must show `escrow_mode: "single-key-test"` |
 | Donate | Send signet sats to escrow | mempool.space/signet |
 | Claim floor | Fund escrow to **≥ 100,000** sats confirmed | Or temporarily lower floor on a test branch only |
 | Claim bond | Exact **10,000** sats bond, claim in UI | Bond spent at verify even if PR never merges |
 | Deliverable + review | Submit deliverable; vote ballots | Needs reviewers (A3) |
-| Extension (optional) | Fulfiller → **Request 30-day extension** on project | Reviewers approve; confirm `claim_window_ends_at` moves |
-| Listing challenge (optional) | Eligible funder on listed/funding/claimable | Opens reviewer ballot; on pass → decline PR |
-| Removal (optional) | Eligible funder on `/reviewers` | Evidence + result PRs to `docs/governance/reviewer-removals.md` |
+| Extension (optional) | Fulfiller → **Request 30-day extension** on project | One-shot; reviewers approve; confirm `claim_window_ends_at` |
+| Listing challenge (optional) | Eligible funder on listed/funding/claimable | Opens reviewer ballot; on pass → decline PR → `/declined` |
+| Removal (optional) | Eligible funder on `/reviewers` | Evidence + result PRs (mirror path after #7 merges) |
 | **Completed / release** | Hook with `decision_id` of tallied approve | **Blocked** until multisig: `outcome: completed` → 403 |
 
 Read-only anytime: `cd workers && npm run smoke:signet`.
@@ -93,11 +103,13 @@ curl -sS -X POST "$API/claims/outcome" \
   -d '{"proposal_id":"…","outcome":"completed","decision_id":"…-deliverable_confirm-r1-…"}'
 ```
 
+Response includes `platform_fee` advisory (`platform_fee_sats`, `fulfiller_sats`, ops address). Keyholders include the 2.5% output at disbursement — Worker never moves funds.
+
 `force: true` requires `force_note` (≥8 chars) and writes `forceoutcome:*` audit rows. On mainnet it also needs Worker var `ALLOW_FORCE_OUTCOME=true`. Avoid on real money.
 
 ### A3. Reviewer quorum (required for review e2e) — YOU
 
-Live roster is empty until you seed. Seats are **permanent**.
+Live roster is empty until you seed (`GET /reviewers` → `count: 0`). Seats are **permanent**.
 
 1. Choose **exactly five** final user ids (`github:{login}`, `x:{id}`, or `nostr:{pubkey}`).
 2. Seed:
@@ -126,13 +138,14 @@ Role **votes** stay gated until ≥10 platform completions and ≥5 active revie
 
 | Item | Why | How |
 |------|-----|-----|
+| Merge [proposals#7](https://github.com/Plebly/proposals/pull/7) | Removals mirror, SEQUENCE, allocate-on-merge, PARAMETERS/fee-gate | Review + merge to `main` |
+| Dedicated signet fee receive | Split fees from smoke escrow balance | New Sparrow receive → `TEST_SUBMISSION_FEE_ADDRESS` + CI `vars.SUBMISSION_FEE_ADDRESS` |
+| Allocate-on-merge secrets | Auto escrow after list merge | After #7: `secrets.PLEBLY_HOOK_SECRET` + `vars.PLEBLY_API_URL` on Plebly/proposals |
 | `ANTHROPIC_API_KEY` | AI first-pass; else ambiguous | `npx wrangler secret put ANTHROPIC_API_KEY` |
 | X OAuth | X login | `X_CLIENT_ID` / `X_CLIENT_SECRET` |
-| Operator-owned demo listing | Spend against a project you control | Update/list with your escrow |
-| Merge `docs/governance/reviewer-removals.md` | First removal evidence PR has a stable target | Already added in proposals tree — merge to `main` |
-| Dedicated signet fee receive | Split fees from smoke escrow balance | New Sparrow receive → `TEST_SUBMISSION_FEE_ADDRESS` + CI var |
-| Allocate-on-merge secrets | Auto escrow after list merge | `secrets.PLEBLY_HOOK_SECRET` + `vars.PLEBLY_API_URL` on Plebly/proposals |
 | Nostr event fanout | Optional ops broadcast | `NOSTR_OPS_NSEC` Worker secret |
+| Replace seed zero fee txids | Before mainnet | Real 10k payments on demo listings (CI allowlist is signet-only) |
+| GitHub bridge App (cross-repo) | Other projects label → Plebly draft | Publish App; set `GITHUB_WEBHOOK_SECRET`; install on test repo; set `vars.PLEBLY_BRIDGE_WEBHOOK=1` on proposals — see [`github-bridge.md`](github-bridge.md) |
 
 ### A5. Optional: signet multisig rehearsal (separate from default deploy)
 
@@ -155,10 +168,10 @@ Do not flip until Part A spend path and reviewer bootstrap are acceptable. Flip 
 
 ### B1. Fee address + Completeness
 
-1. Publish mainnet fee address in `PARAMETERS.md` (replace `TBD`).
+1. Publish mainnet fee address in `PARAMETERS.md` (replace `TBD` with a real `bc1…`).
 2. `npx wrangler secret put SUBMISSION_FEE_ADDRESS`
 3. GitHub vars on `Plebly/proposals`: `SUBMISSION_FEE_ADDRESS`, `BITCOIN_NETWORK=mainnet`, `MEMPOOL_API=https://mempool.space/api`
-4. Confirm fee gate on PRs no longer skips
+4. Confirm fee gate on PRs no longer skips; all-zero fee txids fail on mainnet
 
 ### B2. Keyholders + escrow map — YOU (cannot be automated)
 
@@ -194,7 +207,7 @@ Confirm:
 | Pages | `VITE_BITCOIN_NETWORK=mainnet` rebuild + deploy |
 | Allocate | `escrow_mode: "multisig"`, unique map address |
 | First LN smoke | Small amount you accept losing to Boltz fees |
-| First `outcome: completed` | Includes `decision_id`; cosign release in Sparrow |
+| First `outcome: completed` | Includes `decision_id` + `platform_fee` advisory; cosign release in Sparrow (2.5% ops output) |
 
 ### B5. Soft / deferred (not v1 launch blockers)
 
@@ -211,12 +224,13 @@ Confirm:
 ## Quick priority order
 
 **Signet (now)**  
-1. Your Sparrow signet wallet → replace `TEST_*` → redeploy → confirm `escrow_mode=single-key-test`  
-2. Faucet + exact fee/bond + fund escrow to claim floor  
-3. **Bootstrap five reviewers** (blocker for any human quorum)  
-4. Merge `docs/governance/reviewer-removals.md` on proposals `main`  
-5. Optional: Anthropic key; exercise extension + listing challenge + removal  
-6. Remember: no `completed` release until multisig mode  
+1. Merge [proposals#7](https://github.com/Plebly/proposals/pull/7) (removals mirror / SEQUENCE / allocate-on-merge / fee gate)  
+2. Optional: dedicated Sparrow fee receive ≠ smoke escrow → update `TEST_SUBMISSION_FEE_ADDRESS` + CI var  
+3. Set allocate-on-merge secrets after #7  
+4. Faucet + exact fee/bond + fund escrow to claim floor  
+5. **Bootstrap five reviewers** (blocker for any human quorum)  
+6. Optional: Anthropic / X / Nostr; exercise extension + listing challenge + removal  
+7. Remember: no `completed` release until multisig mode  
 
 **Mainnet (later)**  
 1. **KEYHOLDERS** + Sparrow map; remove `TEST_ESCROW_ADDRESS`  
@@ -230,9 +244,9 @@ Confirm:
 
 - Do not invent KEYHOLDERS xpubs in git without a real ceremony  
 - Do not seed bootstrap with throwaway ids (seats are permanent)  
-- Do not fund a public test-vector address unless you control that seed  
+- Do not invent a mainnet fee `bc1…` — paste a real ops wallet address  
 - Do not expect Lightning on the default signet deploy  
 - Do not set `TEST_ESCROW_ADDRESS` together with descriptor/map (Worker refuses all traffic)  
 - Do not expect `outcome: completed` to succeed while `escrow_mode=single-key-test`  
-- Do not use `force: true` on real money without a written incident note (it is audited in KV only)  
+- Do not use `force: true` on real money without a written incident note + `force_note` (mainnet also needs `ALLOW_FORCE_OUTCOME=true`)  
 - Do not expect parameter-change ballots — not live by design  
