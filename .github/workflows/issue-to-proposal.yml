@@ -1,0 +1,142 @@
+name: Issue to proposal draft
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  draft-proposal:
+    if: >-
+      github.event.action == 'labeled' &&
+      (github.event.label.name == 'plebly-proposal' || github.event.label.name == 'plebly') &&
+      vars.PLEBLY_BRIDGE_WEBHOOK != '1'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft proposal pull request
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const issue = context.payload.issue;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = `issue-proposal/${issue.number}`;
+            const safeTitle = String(issue.title || "Untitled proposal").trim();
+            const slug = safeTitle
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "")
+              .slice(0, 60) || "proposal";
+            const path = `proposals/unindexed/issue-${issue.number}-${slug}.md`;
+            const yamlString = (value) => JSON.stringify(String(value));
+            const issueBody = String(issue.body || "_No issue body was provided._").trim();
+            const document = [
+              "---",
+              "id: null",
+              `title: ${yamlString(safeTitle)}`,
+              "proposal_type: bounty",
+              "tags: []",
+              "status: pr_open",
+              "target_sats: null",
+              "milestones: []",
+              "depends_on: []",
+              "related_work: []",
+              "escrow_address: null",
+              "escrow_index: null",
+              'submission_fee_txid: "REPLACE_WITH_TXID"',
+              "cover_image: null",
+              "proposer:",
+              "  username: null",
+              `  github: ${yamlString(issue.user.login)}`,
+              "  nostr: null",
+              "  x: null",
+              `created_at: ${yamlString(new Date().toISOString())}`,
+              "---",
+              "",
+              `# ${safeTitle}`,
+              "",
+              "## Problem",
+              "",
+              issueBody,
+              "",
+              "## Deliverable",
+              "",
+              "TODO: Define the concrete artifact that will exist when this work is complete.",
+              "",
+              "## Verification",
+              "",
+              "TODO: Describe how an independent reviewer can verify the deliverable.",
+              "",
+              "## Out of scope",
+              "",
+              "TODO: State what this proposal does not cover.",
+              "",
+              "## Notes",
+              "",
+              `Drafted automatically from #${issue.number}. Review and replace all TODO fields before merge.`,
+              "",
+            ].join("\n");
+
+            const head = `${owner}:${branch}`;
+            const { data: existing } = await github.rest.pulls.list({
+              owner, repo, state: "open", head, per_page: 1,
+            });
+            if (existing.length) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `A draft proposal PR is already open: ${existing[0].html_url}`,
+              });
+              return;
+            }
+
+            try {
+              await github.rest.git.getRef({
+                owner, repo, ref: `heads/${branch}`,
+              });
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `A proposal draft branch already exists: https://github.com/${owner}/${repo}/tree/${branch}`,
+              });
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            const { data: main } = await github.rest.git.getRef({
+              owner, repo, ref: "heads/main",
+            });
+            await github.rest.git.createRef({
+              owner, repo, ref: `refs/heads/${branch}`, sha: main.object.sha,
+            });
+            await github.rest.repos.createOrUpdateFileContents({
+              owner,
+              repo,
+              path,
+              message: `draft proposal from #${issue.number}`,
+              content: Buffer.from(document).toString("base64"),
+              branch,
+            });
+            const { data: pr } = await github.rest.pulls.create({
+              owner,
+              repo,
+              head: branch,
+              base: "main",
+              title: `Draft proposal: ${safeTitle}`,
+              body: [
+                `Closes #${issue.number}`,
+                "",
+                "Generated from a labeled issue. Replace TODO fields and the submission fee txid before merge.",
+              ].join("\n"),
+              draft: true,
+            });
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issue.number,
+              body: `Created a draft proposal PR: ${pr.html_url}`,
+            });

@@ -6,7 +6,9 @@
     "validate": "node scripts/validate-proposal.mjs",
     "validate:all": "node scripts/validate-proposal.mjs --all",
     "check:fees": "node scripts/check-fee-payments.mjs",
-    "test": "node --test scripts/check-fee-payments.test.mjs"
+    "assign:sequence": "node scripts/assign-sequence.mjs",
+    "allocate:merge": "node scripts/allocate-on-merge.mjs",
+    "test": "node --test scripts/check-fee-payments.test.mjs scripts/validate-schema-fields.test.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

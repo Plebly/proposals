@@ -28,6 +28,8 @@ Canonical, forkable record for [plebly.fund](https://plebly.fund) bounties.
 3. Open a PR adding the file under `proposals/unindexed/`.
 4. CI must pass; fee must verify before merge.
 
+Or label a GitHub issue `plebly-proposal` (or `plebly`) to open a draft PR via Actions. Third-party funding embeds: [`docs/embed.md`](docs/embed.md).
+
 ## License
 
 CC0-1.0 (public domain dedication) for protocol text unless noted otherwise.
