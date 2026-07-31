@@ -17,6 +17,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Parameters sync check
+        run: npm run parameters:check
       - name: Validate proposals
         run: |
           set -euo pipefail

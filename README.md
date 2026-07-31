@@ -10,7 +10,8 @@ Canonical, forkable record for [plebly.fund](https://plebly.fund) bounties.
 
 | Path | Purpose |
 |------|---------|
-| `PARAMETERS.md` | Launch parameters and fee addresses |
+| `parameters.json` | Canonical numeric parameters (signet + mainnet overlays) |
+| `PARAMETERS.md` | Human-readable parameters (tables synced from JSON) |
 | `KEYHOLDERS.md` | Escrow / ops keyholders and descriptors |
 | `REVIEWERS.md` | Active reviewer roster |
 | `ESCROW_INDEX.md` | Monotonic index → proposal id |

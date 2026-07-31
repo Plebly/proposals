@@ -4,6 +4,10 @@ Fixed at first public submission. Changes require a public process and thirty-da
 
 Community parameter votes are not live. Any future ballot system is volume-gated and cannot change these parameters until its rules and activation process are published.
 
+**Canonical machine source:** [`parameters.json`](./parameters.json). After editing it, run `npm run parameters:sync` to refresh this file and generated TypeScript in `workers` / `plebly.fund`.
+
+<!-- parameters:generated:start -->
+
 ## Section VII (launch-locked)
 
 | Parameter | Value |
@@ -11,11 +15,19 @@ Community parameter votes are not live. Any future ballot system is volume-gated
 | Submission fee | 10,000 sats (exact, non-refundable) |
 | Platform fee | 2.5% of escrow to Plebly at successful disbursement |
 | Milestone threshold | 1,000,000 sats |
-| Minimum funding (claim floor) | 100,000 sats |
 | Claim window | 90 days from claim acceptance |
 | Claim extension | One 30-day extension via reviewer supermajority |
 | Delivery window (direct proposals) | 90 days from escrow allocation |
 | Proposal type default | `bounty` (missing field → bounty) |
+
+### Claim floor by network
+
+| Network | Claim floor | Notes |
+|---------|-------------|-------|
+| Signet | 10,000 sats | Temporary lower floor for faucet-friendly signet testing; restore toward mainnet value before launch. |
+| Mainnet | 100,000 sats | Launch minimum |
+
+Machine-readable source: [`parameters.json`](./parameters.json). Edit that file, then run `npm run parameters:sync`.
 
 ## Ratified (pre-launch process defaults)
 
@@ -51,6 +63,8 @@ See `plebly.fund/docs/claim-abuse-mitigations.md` (risk register). Changes requi
 | Max site claim PRs per day | 10 (Worker global) |
 | Identity relink cooldown | 7 days |
 
+<!-- parameters:generated:end -->
+
 ### Bond rules
 
 - Bond is paid to the **submission fee / ops fee address**, not the project escrow (does not count toward claim floor).
@@ -81,7 +95,7 @@ Publish mainnet fee address here, then set Worker `SUBMISSION_FEE_ADDRESS` + Git
 | **Testing (now)** | Signet | Single `TEST_ESCROW_ADDRESS` you control — see `TESTING.md` |
 | **Launch** | Mainnet only | 3-of-5 multisig — see `KEYHOLDERS.md` |
 
-Workers default: `BITCOIN_NETWORK=signet`, mempool `https://mempool.space/signet/api`.
+Workers default: `BITCOIN_NETWORK=signet`, mempool `https://mempool.space/signet/api`. Numeric knobs (including per-network claim floor) live in `parameters.json`.
 
 ## Residual trust (Q21)
 
