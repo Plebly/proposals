@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "shared": {
+    "submission_fee_sats": 10000,
+    "platform_fee_percent": 2.5,
+    "milestone_threshold_sats": 1000000,
+    "claim_window_days": 90,
+    "claim_extension_days": 30,
+    "delivery_window_days": 90,
+    "proposal_type_default": "bounty",
+    "funding_window_days": 180,
+    "funding_window_extension_days": 90,
+    "idle_claimable_ballot_days": 365,
+    "badge_notable_sats": 21000,
+    "badge_major_sats": 100000,
+    "badge_patron_sats": 1000000,
+    "submission_fee_confirmations": 1,
+    "funding_confirmations": 3,
+    "completion_finality_confirmations": 3,
+    "core_annual_gap_sats": 2100000,
+    "claim_bond_sats": 10000,
+    "max_active_claims": 1,
+    "claim_pending_ttl_hours": 72,
+    "reclaim_cooldown_days": 30,
+    "claim_checkpoint_day": 45,
+    "claim_checkpoint_grace_days": 7,
+    "claim_abuse_escalation_threshold": 2,
+    "max_site_claim_prs_per_day": 10,
+    "identity_relink_cooldown_days": 7
+  },
+  "networks": {
+    "signet": {
+      "claim_floor_sats": 10000,
+      "submission_fee_address": "tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz",
+      "claim_floor_note": "Temporary lower floor for faucet-friendly signet testing; restore toward mainnet value before launch."
+    },
+    "mainnet": {
+      "claim_floor_sats": 100000,
+      "submission_fee_address": null
+    }
+  }
+}

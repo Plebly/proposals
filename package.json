@@ -8,7 +8,9 @@
     "check:fees": "node scripts/check-fee-payments.mjs",
     "assign:sequence": "node scripts/assign-sequence.mjs",
     "allocate:merge": "node scripts/allocate-on-merge.mjs",
-    "test": "node --test scripts/check-fee-payments.test.mjs scripts/validate-schema-fields.test.mjs"
+    "parameters:sync": "node scripts/sync-parameters.mjs",
+    "parameters:check": "node scripts/sync-parameters.mjs --check",
+    "test": "node --test scripts/check-fee-payments.test.mjs scripts/validate-schema-fields.test.mjs scripts/parameters.test.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",
