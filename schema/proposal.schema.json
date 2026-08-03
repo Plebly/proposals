@@ -52,6 +52,11 @@
           "verification": { "type": "string", "minLength": 10 },
           "out_of_scope": { "type": "string" },
           "allocation_sats": { "type": "integer", "minimum": 1 },
+          "funding_threshold_sats": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional funding-bar unlock marker (display only; not payout allocation)"
+          },
           "deadline": { "type": "string", "minLength": 4 },
           "dependencies": {
             "type": "array",
