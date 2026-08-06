@@ -229,6 +229,26 @@ Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed 
 
 `force: true` skips the decision gate and writes an immutable `forceoutcome:{id}` audit row (+ index). It always requires `force_note` (≥8 chars). On mainnet it also requires Worker var `ALLOW_FORCE_OUTCOME=true` (signet still allows force with a note). Successful `completed` responses include a `platform_fee` advisory (`percent: 2.5`, `platform_fee_sats`, `fulfiller_sats`, ops address) — Worker never moves funds. Rejected outcomes are unchanged. Workers still do not sign PSBTs — only gate the ops completion path.
 
+### Money movement / keyholder queue (coordination only)
+
+**Threat model:** Compromising the Worker, SPA, or a single GitHub account must not move escrow or bond sats. Signing stays in Sparrow (3-of-5). Platform holds identity + disbursement packages + post-broadcast verification.
+
+| Action | Applicant/funder | Ops | Active keyholder | HOOK_SECRET |
+|--------|------------------|-----|------------------|---------------|
+| Withdraw application / set own refund address (unfrozen) | self | — | — | — |
+| View Account → Funds | self | — | — | — |
+| Invite keyholder | — | yes | — | yes |
+| Submit own xpub / fingerprint | invited self | — | — | — |
+| Co-attest activate seat | — | **no** | yes (not self) | **no** |
+| View disburse queue / PSBT / chat | — | **no** | yes | — |
+| Propose / confirm settle (mempool verify) | — | **no** | yes (+ dual for `release` / `contrib_refund`) | only if `ALLOW_HOOK_DISBURSE_SETTLE=true` |
+
+Cold-start: `POST /keyholders/genesis` (hook) may activate two seats once when zero actives exist. Dual co-attest thereafter. PSBTs live under private R2 keys `disburse/…` (not public `/media/`). Append-only `audit:money:*`. Money notification types are notification-only (never public `/events`).
+
+Keyholder **mutating** routes require session age &lt; 12h (re-login) and per-actor hourly rate limits (refund address, register, PSBT, chat, co-attest, mark-paid). Dual KH revoke for product path; ops/hook force-revoke with audit. Shortcuts: `POST /claims/bonds/mark-paid`, `POST /refunds/mark-paid` (still mempool-verify via disburse settle; contrib/release dual-ack unchanged). Yearly key re-confirm: `keys_stale` on `/keyholders/me` when `verified_at` &gt; 365d (UI warn).
+
+SPA: Account tab **Funds**; console at `/keyholders` (nav link only for invited/active seats); refunding proposals show per-funder register status via `GET /refunds/status/:proposalId`.
+
 ---
 
 ## 7. Funding and donations
@@ -532,9 +552,10 @@ CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_
 
 ### Refunds (Q17)
 
-- Contributors register refund address on indexed outpoint (`POST /refunds/register`).
-- Ops list via hook. Dust / batch rules are policy for keyholders; **no platform fee** on refunds.
-- Automated batch payouts are **not** Worker-implemented.
+- Contributor-return paths set proposal status **`refunding`**; contributors register refund address on indexed outpoint (`POST /refunds/register`, `GET /refunds/mine`).
+- Claim bonds: ledger continuity + `GET /claims/bonds/mine` / refund-address; keyholders settle via `bond_refund` disburse items.
+- Dust / batch rules are policy for keyholders; **no platform fee** on refunds.
+- Automated coin selection / broadcast are **not** Worker-implemented — Sparrow + dual-ack settle records only.
 
 ### Keyholder stall (Q21)
 
@@ -558,7 +579,8 @@ SPA routes (`plebly.fund/src/router.ts`):
 | `/declined` | Archive of `declined` / `declined_fundable` listings |
 | `/reviewers` | Governance: jump nav; active roster; open decisions; removal ballots (+ evidence/result PR links); open-a-removal form; **operational roles** (seats / ballots / nominate when gated open) — footer + About |
 | `/u/:username` | Public profile (+ reviewer badge when seated) |
-| `/account` | Profile (bio, skills tags, links, payout, funder appearance), watching, claims (+ history), proposals; reviewer / funder links |
+| `/account` | Profile (bio, skills tags, links, payout, funder appearance), watching, claims (+ history), **Funds** (bonds + contribution refunds), proposals; reviewer / funder links; keyholder card when invited/active |
+| `/keyholders` | Keyholder console (roster, disburse queue, PSBT coord, dual-ack settle) — gated to invited/active seats |
 | `/about` | Beliefs, how-it-works, **Reviewers** governance section, parameters, residual trust, get involved |
 | `/embed.js` | Static third-party widget (`public/embed.js`) — loads `GET /embed/:proposalId` and renders a funding bar linked to `/p/{id}` |
 
@@ -672,7 +694,7 @@ Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 | Nostr ops fanout | `NOSTR_OPS_NSEC` unset |
 | Lightning on signet | **Always off** — auto-on mainnet; LN staging via `BITCOIN_NETWORK=testnet` |
 | Ops suspend of other users | Self-only today |
-| Automated refund batching | **v1 deferred** — register + keyholder batch only |
+| Automated refund batching | **v1 deferred** — register + keyholder queue + Sparrow; Worker verifies settle txids only |
 | Browser / e2e suite | Unit/HTTP only — no Playwright against live UI |
 
 **Already shipped (not gaps):** escrow mode hard boundary; Sparrow signet demo escrows on proposals `main` (#6); flip script + mainnet/signet smokes; Pages network vars; Completeness `validate` on `main`; reviewer decisions + funder removal; **one-shot** claim/funding extensions; listing challenge (API + SPA); `/declined` + contributor badges; platform-fee advisory; hardened `force` outcome; ops-role nominate/vote/tally + volume gate; removal git mirror code; cron governance tallies; `decision_id` release binding + force audit; **Q9 bonded applications** (`first_bonded` / `proposer_select`, auto-award, org apply, credit collaborators).

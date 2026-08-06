@@ -57,3 +57,17 @@ Per-proposal receive address = descriptor at `/0/<escrow_index>` (see `ESCROW_IN
 | 3 | TBD | | |
 | 4 | TBD | Independent | |
 | 5 | TBD | Independent | |
+
+## Platform identity (accountability, not custody)
+
+Keyholders **sign only in Sparrow** (3-of-5). The Worker never holds keys, signs PSBTs, or broadcasts.
+
+On-platform registry (`/keyholders` console):
+
+- GitHub session bound to a published fingerprint + xpub
+- **Dual active-keyholder co-attest** required to activate a seat (ops alone cannot activate)
+- Disbursement queue packages releases / bond refunds / contributor refunds for Sparrow
+- Settle requires on-chain txid verification; releases and contributor refunds need a second keyholder confirm
+- PSBT artifacts are private to keyholders (not public media)
+
+Publishing this markdown roster remains the human-readable source of truth for descriptors.
