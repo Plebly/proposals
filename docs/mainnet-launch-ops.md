@@ -20,7 +20,7 @@ Signet keeps working while these stay open; **mainnet allocate / fee CI / review
    ```
    While still on signet testing, use the signet fee address and `BITCOIN_NETWORK=signet` / signet mempool API (see current repo vars).
 4. Require the Completeness workflow status check on `main` (branch protection or ruleset). Check name: **`validate`**.
-5. Confirm a PR that touches `proposals/**/*.md` runs the on-chain fee gate (no “fee gate skipped” warning).
+5. Confirm a PR that touches `proposals/**/*.md` runs the on-chain fee gate (fails closed if `SUBMISSION_FEE_ADDRESS` unset).
 
 ## B. Keyholders + escrow allocate
 

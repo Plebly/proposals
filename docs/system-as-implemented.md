@@ -162,7 +162,7 @@ Installation token opens PRs into `Plebly/proposals` (propose, **amend**, claim,
 
 `pr_open` → `unindexed` → `listed` | `declined` | `declined_fundable` → `funding` / `claimable` → `claimed` (bounty) → `in_review` → `completed` | `rejected`  
 
-Also: `underfunded`, `abandoned_vote`, `refunding`, `redirected`.
+Also: `underfunded`, `abandoned_vote`, `refunding`, `redirect_pending` (ops/KH manual escrow move; legacy alias `redirected`).
 
 ### Folders (on disk)
 
@@ -227,7 +227,7 @@ Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed 
 
 `POST /claims/outcome` with `outcome: "completed"` (authorize keyholder disbursement after review) calls `assertMultisigForRelease`. In `single-key-test` it returns **403** `multisig_required_for_release`. On multisig, non-forced completion requires a tallied approve on `deliverable_confirm` or `second_review` — preferably via explicit `decision_id` (`resolveReleaseDecision`). `claim_extension` / `listing_challenge` approves **cannot** authorize release.
 
-`force: true` skips the decision gate and writes an immutable `forceoutcome:{id}` audit row (+ index). It always requires `force_note` (≥8 chars). On mainnet it also requires Worker var `ALLOW_FORCE_OUTCOME=true` (signet still allows force with a note). Successful `completed` responses include a `platform_fee` advisory (`percent: 2.5`, `platform_fee_sats`, `fulfiller_sats`, ops address) — Worker never moves funds. Rejected outcomes are unchanged. Workers still do not sign PSBTs — only gate the ops completion path.
+`force: true` skips the decision gate and writes an immutable `forceoutcome:{id}` audit row (+ index). It always requires `force_note` (≥8 chars). On mainnet it also requires Worker var `ALLOW_FORCE_OUTCOME=true` (signet still allows force with a note). Successful `completed` responses include a `platform_fee` advisory (`percent: 2.5`, `platform_fee_sats`, `fulfiller_sats`, ops address) and create a **release disburse package with those sats before flipping completed** — missing/invalid payout → 403 `payout_required`; empty escrow → 409 `escrow_empty`. For bounty claims, release payout prefers the **awarded application** address over frontmatter (prevents stale FM override). Workers still do not sign PSBTs — only gate the ops completion path. Final reject / expired rebuttal window → bond **forfeited** (application withdraw/lose/reject stays refundable).
 
 ### Money movement / keyholder queue (coordination only)
 
@@ -518,7 +518,7 @@ Implemented in `workers/src/lib/fee-payment.ts`.
 
 Purposes: `submission_fee` | `claim_bond` (cross-purpose: one txid cannot pay both).
 
-CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_ADDRESS` is set (warns + skips if unset). Signet all-zero `submission_fee_txid` is allowed **only** for seed demos (`demo-signet-smoke.md`, `knots-size-value-spam.md`); new listings need a real 10k payment. Mainnet rejects zeros. Live CI fee var points at `tb1qhj27…`. **Ops:** keep the var set and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
+CI: `proposals/scripts/check-fee-payments.mjs` on PRs that touch proposal markdown — **fails** if `vars.SUBMISSION_FEE_ADDRESS` is unset. Signet all-zero `submission_fee_txid` is allowed **only** for seed demos (`demo-signet-smoke.md`, `knots-size-value-spam.md`); new listings need a real 10k payment. Mainnet rejects zeros. Live CI fee var points at `tb1qhj27…`. **Ops:** keep the var set and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
 
 ---
 
@@ -527,7 +527,8 @@ CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_
 ### Funding window (Q5)
 
 - Frontmatter: `escrow_allocated_at`, `funding_window_ends_at` (180d).
-- Cron: window ended and balance &lt; floor → PR status `underfunded`.
+- Cron: window ended and balance &lt; floor → PR status `underfunded`; if escrow balance &gt; 0 also open an **underfunded** contributor ballot (Q18). Empty escrow → underfunded with no ballot.
+- Enter `refunding` only when ballot winner is `refund` (not auto on window end).
 - UI: days-remaining banner on project page.
 - Contributor ballot winner `extend` → one-shot +90d (`grantFundingExtension` / `fundext:`) and PR-patch restore to `listed`.
 
@@ -547,14 +548,17 @@ CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_
 - Idle **365d** claimable → open ballot + status `abandoned_vote`.
 - Options: `extend` | `refund` | `redirect:<proposal_id>` (≤3 noms).
 - Voting: one identity-linked contributor with **≥3 confs** = one vote.
-- Tally (hook): plurality; quorum = majority of distinct contributors (or all if &lt;3).
+- Tally (hook **or cron** after `closes_at`): plurality; quorum = majority of distinct contributors (or all if &lt;3).
+- Winner `refund` → status `refunding` + contrib refund package; winner `redirect:*` → `redirect_pending` + `redirect_to` (ops/KH manual; no auto escrow move).
 - Decision artifact PR under `decisions/`.
 
 ### Refunds (Q17)
 
-- Contributor-return paths set proposal status **`refunding`**; contributors register refund address on indexed outpoint (`POST /refunds/register`, `GET /refunds/mine`).
-- Claim bonds: ledger continuity + `GET /claims/bonds/mine` / refund-address; keyholders settle via `bond_refund` disburse items.
-- Dust / batch rules are policy for keyholders; **no platform fee** on refunds.
+- Contributor-return paths set proposal status **`refunding`**; contributors **claim identity first** (`POST /contributions/claim`), then register refund address by outpoint **or** `swap_id` (`POST /refunds/register`, `GET /refunds/mine`). Register never mints identity.
+- LN indexer merges claim-tx outpoints into the existing LN contribution row (no duplicate ledger lines).
+- Claim bonds: apply wizard requires network-valid payout/refund address before bond pay; `GET /claims/bonds/mine` includes `needs_refund_address`; keyholders settle via `bond_refund` disburse items.
+- Dust outputs (&lt;546 sats) are marked `non_refundable_dust` and skipped in packages; **no platform fee** on refunds.
+- Settle stamps `refund_txid` only for contributions present in the frozen package outputs.
 - Automated coin selection / broadcast are **not** Worker-implemented — Sparrow + dual-ack settle records only.
 
 ### Keyholder stall (Q21)
