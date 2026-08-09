@@ -40,6 +40,12 @@ export const PARAMETERS_JSON_PATH = join(PROPOSALS_ROOT, "parameters.json");
  * @property {number} claim_abuse_escalation_threshold
  * @property {number} max_site_claim_prs_per_day
  * @property {number} identity_relink_cooldown_days
+ * @property {string} claim_mode_default
+ * @property {number[]} claim_window_days_presets
+ * @property {number} claim_window_days_default
+ * @property {number} claim_decision_grace_days
+ * @property {number} max_claim_applications
+ * @property {number} max_claim_collaborators
  */
 
 /**
@@ -131,6 +137,12 @@ export function emitWorkersParametersTs(doc) {
   claim_abuse_escalation_threshold: ${p.claim_abuse_escalation_threshold},
   max_site_claim_prs_per_day: ${p.max_site_claim_prs_per_day},
   identity_relink_cooldown_days: ${p.identity_relink_cooldown_days},
+  claim_mode_default: ${JSON.stringify(p.claim_mode_default)},
+  claim_window_days_presets: ${JSON.stringify(p.claim_window_days_presets)},
+  claim_window_days_default: ${p.claim_window_days_default},
+  claim_decision_grace_days: ${p.claim_decision_grace_days},
+  max_claim_applications: ${p.max_claim_applications},
+  max_claim_collaborators: ${p.max_claim_collaborators},
   submission_fee_address: ${JSON.stringify(p.submission_fee_address)},
 }`;
 
@@ -167,6 +179,12 @@ export type NetworkParameters = {
   claim_abuse_escalation_threshold: number;
   max_site_claim_prs_per_day: number;
   identity_relink_cooldown_days: number;
+  claim_mode_default: string;
+  claim_window_days_presets: number[];
+  claim_window_days_default: number;
+  claim_decision_grace_days: number;
+  max_claim_applications: number;
+  max_claim_collaborators: number;
   submission_fee_address: string | null;
 };
 
@@ -206,6 +224,12 @@ export const CLAIM_ABUSE_ESCALATION_THRESHOLD = ${p.claim_abuse_escalation_thres
 export const CORE_ANNUAL_GAP_SATS = ${p.core_annual_gap_sats};
 export const MAX_SITE_CLAIM_PRS_PER_DAY = ${p.max_site_claim_prs_per_day};
 export const IDENTITY_RELINK_COOLDOWN_DAYS = ${p.identity_relink_cooldown_days};
+export const CLAIM_MODE_DEFAULT = ${JSON.stringify(p.claim_mode_default)} as const;
+export const CLAIM_WINDOW_DAYS_PRESETS = ${JSON.stringify(p.claim_window_days_presets)} as const;
+export const CLAIM_WINDOW_DAYS_DEFAULT = ${p.claim_window_days_default};
+export const CLAIM_DECISION_GRACE_DAYS = ${p.claim_decision_grace_days};
+export const MAX_CLAIM_APPLICATIONS = ${p.max_claim_applications};
+export const MAX_CLAIM_COLLABORATORS = ${p.max_claim_collaborators};
 export const CLAIM_WINDOW_DAYS = ${p.claim_window_days};
 export const CLAIM_EXTENSION_DAYS = ${p.claim_extension_days};
 export const FUNDING_WINDOW_DAYS = ${p.funding_window_days};
@@ -282,5 +306,11 @@ See \`plebly.fund/docs/claim-abuse-mitigations.md\` (risk register). Changes req
 | Claim abuse escalation threshold | ${s.claim_abuse_escalation_threshold} (expired/abandoned without completion → 2× bond) |
 | Max site claim PRs per day | ${s.max_site_claim_prs_per_day} (Worker global) |
 | Identity relink cooldown | ${s.identity_relink_cooldown_days} days |
+| Default claim mode | \`${s.claim_mode_default}\` (\`first_bonded\` \\| \`proposer_select\`) |
+| Claim application window presets | ${(s.claim_window_days_presets || []).join(" / ")} days (\`proposer_select\`) |
+| Default application window | ${s.claim_window_days_default} days |
+| Claim decision grace | ${s.claim_decision_grace_days} days (then auto-award earliest bonded) |
+| Max claim applications | ${s.max_claim_applications} per proposal |
+| Max claim collaborators | ${s.max_claim_collaborators} (credit-only) |
 `;
 }

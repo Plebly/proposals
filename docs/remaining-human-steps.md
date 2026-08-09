@@ -181,7 +181,7 @@ Do not flip until Part A spend path and reviewer bootstrap are acceptable. Flip 
 5. **Remove** `TEST_ESCROW_ADDRESS` / `TEST_SUBMISSION_FEE_ADDRESS` from Worker vars.
 6. Watch `/health` `escrow_map_remaining`; refresh the map before exhaustion.
 
-Keyholders stay **out of band forever** (Sparrow). There is no Worker election UI for keys — by design.
+**Signing** stays out of band forever (Sparrow). There is no Worker election UI for keys and the Worker never signs. Platform identity + disbursement queue (`/keyholders`) coordinate packages and dual-ack settle records only.
 
 ### B3. Bootstrap reviewers
 
@@ -213,8 +213,8 @@ Confirm:
 | Item | Stance |
 |------|--------|
 | In-Worker descriptor → address derive | Deferred — Sparrow map |
-| Automated refund batching | Deferred — register + keyholder batch |
-| Multisig PSBT signing in Worker | **Never** — human cosign + runbooks |
+| Automated refund batching | Deferred — register + keyholder queue + Sparrow batch |
+| Multisig PSBT signing in Worker | **Never** — human cosign + runbooks; PSBT storage is coordination only |
 | Community parameter votes | Deferred — publish rules in `PARAMETERS.md` first |
 | Keyholder replacement process | Human / Q21 stall runbook only |
 

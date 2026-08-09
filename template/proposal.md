@@ -2,6 +2,9 @@
 id: null
 title: "Short descriptive title"
 proposal_type: bounty
+# Bounty only — frozen at propose (Q9). Ignored for direct.
+claim_mode: proposer_select  # or first_bonded
+claim_window_days: 7         # 3 | 7 | 14 when proposer_select
 tags: []
 # Optional shared Commons / parent initiative label; informational only.
 parent_initiative: null

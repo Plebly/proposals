@@ -15,27 +15,49 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const params = JSON.parse(
+  fs.readFileSync(path.join(root, "parameters.json"), "utf8"),
+);
+const paramFee = Number(params?.shared?.submission_fee_sats);
+const paramBond = Number(params?.shared?.claim_bond_sats);
+
 const feeAddress = (process.env.SUBMISSION_FEE_ADDRESS || "").trim();
-const feeSats = Number(process.env.SUBMISSION_FEE_SATS || 10_000);
-const bondSats = Number(process.env.CLAIM_BOND_SATS || 10_000);
+const feeSats = Number(
+  process.env.SUBMISSION_FEE_SATS ||
+    (Number.isFinite(paramFee) ? paramFee : 10_000),
+);
+const bondSats = Number(
+  process.env.CLAIM_BOND_SATS ||
+    (Number.isFinite(paramBond) ? paramBond : 10_000),
+);
+const network = (process.env.BITCOIN_NETWORK || "").toLowerCase().trim();
+if (!network) {
+  console.error("BITCOIN_NETWORK required for fee checks");
+  process.exit(1);
+}
 const mempoolApi = (
   process.env.MEMPOOL_API ||
-  (process.env.BITCOIN_NETWORK === "mainnet"
+  (network === "mainnet" || network === "bitcoin"
     ? "https://mempool.space/api"
-    : "https://mempool.space/signet/api")
+    : network === "testnet"
+      ? "https://mempool.space/testnet/api"
+      : "https://mempool.space/signet/api")
 ).replace(/\/$/, "");
-const mainnet = (process.env.BITCOIN_NETWORK || "signet") === "mainnet";
+const mainnet = network === "mainnet" || network === "bitcoin";
 
-/** Basename allowlist for historical seed demos (signet only). */
+/** Repo-relative paths for historical seed demos (signet only). */
 const ZERO_TXID_ALLOWLIST = new Set([
-  "demo-signet-smoke.md",
-  "knots-size-value-spam.md",
+  "proposals/listed/demo-signet-smoke.md",
+  "proposals/listed/knots-size-value-spam.md",
 ]);
 
 function allowsZeroFeeTxid(file) {
-  return ZERO_TXID_ALLOWLIST.has(path.basename(file));
+  const rel = path.relative(root, path.resolve(root, file)).replace(/\\/g, "/");
+  return ZERO_TXID_ALLOWLIST.has(rel);
 }
 
 const files = process.argv.slice(2).filter((f) => f.endsWith(".md"));
@@ -50,6 +72,57 @@ if (!feeAddress) {
 if (files.length === 0) {
   console.log("No proposal files to fee-check.");
   process.exit(0);
+}
+
+/** Scan repo for prior use of fee/bond txids (CI anti-replay). */
+function collectUsedTxids(exceptFiles) {
+  const except = new Set(exceptFiles.map((f) => path.resolve(f)));
+  const used = new Map(); // txid -> file
+  const roots = ["proposals"];
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    const walk = (dir) => {
+      for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) walk(full);
+        else if (ent.name.endsWith(".md")) {
+          if (except.has(path.resolve(full))) continue;
+          const { data } = matter(fs.readFileSync(full, "utf8"));
+          for (const key of ["submission_fee_txid", "claim_bond_txid"]) {
+            const tx = data[key] ? String(data[key]).toLowerCase() : "";
+            if (/^[0-9a-f]{64}$/.test(tx) && !/^0{64}$/.test(tx)) {
+              used.set(tx, full);
+            }
+          }
+        }
+      }
+    };
+    walk(root);
+  }
+  return used;
+}
+
+const priorTxids = collectUsedTxids(files);
+/** Within this PR batch — first file wins, second is replay. */
+const batchTxids = new Map();
+
+function assertFreshTxid(file, txid, label) {
+  const t = txid.toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(t) || /^0{64}$/.test(t)) return true;
+  if (priorTxids.has(t)) {
+    console.error(
+      `${file}: ${label} already used in ${priorTxids.get(t)}`,
+    );
+    return false;
+  }
+  if (batchTxids.has(t)) {
+    console.error(
+      `${file}: ${label} reused within this PR (also ${batchTxids.get(t)})`,
+    );
+    return false;
+  }
+  batchTxids.set(t, file);
+  return true;
 }
 
 async function getTx(txid) {
@@ -73,7 +146,9 @@ for (const file of files) {
 
   if (data.submission_fee_txid) {
     const txid = String(data.submission_fee_txid);
-    if (/^0{64}$/.test(txid)) {
+    if (!assertFreshTxid(file, txid, "submission_fee_txid")) {
+      failed++;
+    } else if (/^0{64}$/.test(txid)) {
       if (mainnet) {
         console.error(`${file}: zero submission_fee_txid not allowed on mainnet`);
         failed++;
@@ -87,27 +162,27 @@ for (const file of files) {
           `${file}: signet seed placeholder fee txid (all zeros) — replace with a real 10k payment before mainnet`,
         );
       }
-      continue;
-    }
-    try {
-      const tx = await getTx(txid);
-      if (mainnet && !tx.status?.confirmed) {
-        console.error(`${file}: submission fee tx not confirmed`);
-        failed++;
-      } else {
-        const paid = paidToFee(tx);
-        if (paid !== feeSats) {
-          console.error(
-            `${file}: submission fee must be exact ${feeSats} sats to ${feeAddress} (got ${paid})`,
-          );
+    } else {
+      try {
+        const tx = await getTx(txid);
+        if (mainnet && !tx.status?.confirmed) {
+          console.error(`${file}: submission fee tx not confirmed`);
           failed++;
         } else {
-          console.log(`${file}: submission fee ok`);
+          const paid = paidToFee(tx);
+          if (paid !== feeSats) {
+            console.error(
+              `${file}: submission fee must be exact ${feeSats} sats to ${feeAddress} (got ${paid})`,
+            );
+            failed++;
+          } else {
+            console.log(`${file}: submission fee ok`);
+          }
         }
+      } catch (e) {
+        console.error(`${file}: submission fee check failed: ${e.message}`);
+        failed++;
       }
-    } catch (e) {
-      console.error(`${file}: submission fee check failed: ${e.message}`);
-      failed++;
     }
   }
 
@@ -117,6 +192,8 @@ for (const file of files) {
       console.error(
         `${file}: claim_bond_txid required when introducing claimed status`,
       );
+      failed++;
+    } else if (!assertFreshTxid(file, txid, "claim_bond_txid")) {
       failed++;
     } else {
       try {

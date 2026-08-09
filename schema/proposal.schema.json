@@ -123,11 +123,53 @@
     "proposer": {
       "type": "object",
       "properties": {
+        "id": { "type": ["string", "null"] },
         "username": { "type": ["string", "null"] },
         "github": { "type": ["string", "null"] },
         "nostr": { "type": ["string", "null"] },
         "x": { "type": ["string", "null"] }
       }
+    },
+    "claim_mode": {
+      "type": "string",
+      "enum": ["first_bonded", "proposer_select"],
+      "description": "Bounty only. Frozen at propose. first_bonded = first confirmed bond wins; proposer_select = window then pick / auto earliest bonded"
+    },
+    "claim_window_days": {
+      "type": ["integer", "null"],
+      "enum": [3, 7, 14, null],
+      "description": "Application window presets for proposer_select; clock starts when claimable (floor met)"
+    },
+    "claimer": {
+      "type": ["string", "null"],
+      "description": "Awarded claimer login (individual username or GitHub org)"
+    },
+    "claimer_type": {
+      "type": ["string", "null"],
+      "enum": ["individual", "org", null]
+    },
+    "claim_agent": {
+      "type": ["string", "null"],
+      "description": "GitHub user who applied on behalf of an org"
+    },
+    "claim_award_reason": {
+      "type": ["string", "null"],
+      "enum": ["first_bonded", "proposer_accept", "auto_earliest_bonded", null]
+    },
+    "claim_collaborators": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 39 },
+      "maxItems": 5,
+      "description": "Credit-only collaborators (no operate rights, no completion badges)"
+    },
+    "claim_opened_at": { "type": ["string", "null"] },
+    "claimed_at": { "type": ["string", "null"] },
+    "payout_address": { "type": ["string", "null"] },
+    "claim_bond_txid": {
+      "type": ["string", "null"],
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-fA-F]{64}$"
     },
     "created_at": { "type": "string" }
   },

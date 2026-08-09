@@ -3,14 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "validate": "node scripts/validate-proposal.mjs",
-    "validate:all": "node scripts/validate-proposal.mjs --all",
-    "check:fees": "node scripts/check-fee-payments.mjs",
+    "validate": "BITCOIN_NETWORK=${BITCOIN_NETWORK:-signet} node scripts/validate-proposal.mjs",
+    "validate:all": "BITCOIN_NETWORK=${BITCOIN_NETWORK:-signet} node scripts/validate-proposal.mjs --all",
+    "check:fees": "BITCOIN_NETWORK=${BITCOIN_NETWORK:-signet} node scripts/check-fee-payments.mjs",
     "assign:sequence": "node scripts/assign-sequence.mjs",
     "allocate:merge": "node scripts/allocate-on-merge.mjs",
     "parameters:sync": "node scripts/sync-parameters.mjs",
     "parameters:check": "node scripts/sync-parameters.mjs --check",
-    "test": "node --test scripts/check-fee-payments.test.mjs scripts/validate-schema-fields.test.mjs scripts/parameters.test.mjs"
+    "check:escrow": "BITCOIN_NETWORK=${BITCOIN_NETWORK:-signet} node scripts/check-escrow-address.mjs",
+    "test": "node --test scripts/check-fee-payments.test.mjs scripts/validate-schema-fields.test.mjs scripts/parameters.test.mjs scripts/security-gates.test.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

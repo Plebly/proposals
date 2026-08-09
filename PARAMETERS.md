@@ -62,15 +62,23 @@ See `plebly.fund/docs/claim-abuse-mitigations.md` (risk register). Changes requi
 | Claim abuse escalation threshold | 2 (expired/abandoned without completion → 2× bond) |
 | Max site claim PRs per day | 10 (Worker global) |
 | Identity relink cooldown | 7 days |
+| Default claim mode | `proposer_select` (`first_bonded` \| `proposer_select`) |
+| Claim application window presets | 3 / 7 / 14 days (`proposer_select`) |
+| Default application window | 7 days |
+| Claim decision grace | 3 days (then auto-award earliest bonded) |
+| Max claim applications | 10 per proposal |
+| Max claim collaborators | 5 (credit-only) |
 
 <!-- parameters:generated:end -->
 
 ### Bond rules
 
 - Bond is paid to the **submission fee / ops fee address**, not the project escrow (does not count toward claim floor).
-- **Refunded** (keyholder batch) when status reaches `completed`.
+- Paid at **apply** (bond verified sync). Winner’s bond locks for the delivery lifecycle.
+- **Refunded** (keyholder batch) when status reaches `completed`, or for non-awarded applicants (rejected / withdrawn / auto-lost).
 - **Forfeited** on claim-window expiry, abandoned release after checkpoint miss, or clear bond fraud.
 - Reused bond txids are rejected.
+- Application window for `proposer_select` starts when the project becomes **claimable** (floor met), not at propose time.
 
 ### Suspension (last resort, public)
 

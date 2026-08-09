@@ -7,7 +7,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, plebly]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,14 +17,22 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Unit tests
+        run: npm test
       - name: Parameters sync check
         run: npm run parameters:check
       - name: Validate proposals
+        env:
+          BITCOIN_NETWORK: ${{ vars.BITCOIN_NETWORK }}
         run: |
           set -euo pipefail
+          if [ -z "${BITCOIN_NETWORK:-}" ]; then
+            echo "::error::BITCOIN_NETWORK repo variable unset — validate refuses soft-default. Set vars.BITCOIN_NETWORK to signet|testnet|mainnet."
+            exit 1
+          fi
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch origin "${{ github.base_ref }}" --depth=1
-            mapfile -t files < <(git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -E '^proposals/.+\.md$' || true)
+            mapfile -t files < <(node scripts/list-changed-proposals.mjs "origin/${{ github.base_ref }}")
             if [ ${#files[@]} -eq 0 ]; then
               echo "No proposal markdown changes; validating fixtures/all."
               npm run validate:all
@@ -35,23 +43,65 @@ jobs:
             npm run validate:all
           fi
       - name: On-chain fee / bond gate
-        if: github.event_name == 'pull_request'
         env:
           SUBMISSION_FEE_ADDRESS: ${{ vars.SUBMISSION_FEE_ADDRESS }}
           MEMPOOL_API: ${{ vars.MEMPOOL_API }}
           BITCOIN_NETWORK: ${{ vars.BITCOIN_NETWORK }}
         run: |
           set -euo pipefail
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          mapfile -t files < <(git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -E '^proposals/.+\.md$' || true)
+          if [ -z "${SUBMISSION_FEE_ADDRESS:-}" ]; then
+            echo "::error::SUBMISSION_FEE_ADDRESS repo variable unset — fee gate cannot run. Set vars.SUBMISSION_FEE_ADDRESS (see docs/mainnet-launch-ops.md) and require the validate status check on main."
+            exit 1
+          fi
+          if [ -z "${BITCOIN_NETWORK:-}" ]; then
+            echo "::error::BITCOIN_NETWORK repo variable unset — fee/escrow gates refuse soft-default. Set vars.BITCOIN_NETWORK to signet|testnet|mainnet."
+            exit 1
+          fi
+          # Do not force signet mempool — check-fee-payments.mjs picks network API when MEMPOOL_API unset.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            mapfile -t files < <(node scripts/list-changed-proposals.mjs "origin/${{ github.base_ref }}")
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "${BEFORE}" ] || [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
+              echo "No before SHA; fee-checking all proposal markdown."
+              mapfile -t files < <(git ls-files 'proposals/**/*.md')
+            else
+              mapfile -t files < <(node scripts/list-changed-proposals.mjs "${BEFORE}" "${{ github.sha }}")
+            fi
+          fi
           if [ ${#files[@]} -eq 0 ]; then
             echo "No proposal files for fee gate."
             exit 0
           fi
-          if [ -z "${SUBMISSION_FEE_ADDRESS:-}" ]; then
-            echo "::warning::SUBMISSION_FEE_ADDRESS repo variable unset — fee gate skipped. Set vars.SUBMISSION_FEE_ADDRESS (see docs/mainnet-launch-ops.md) and require the validate status check on main."
+          node scripts/check-fee-payments.mjs "${files[@]}"
+      - name: Escrow address allowlist / HRP gate
+        env:
+          BITCOIN_NETWORK: ${{ vars.BITCOIN_NETWORK }}
+          ESCROW_ADDRESS_ALLOWLIST: ${{ vars.ESCROW_ADDRESS_ALLOWLIST }}
+          TEST_ESCROW_ADDRESS: ${{ vars.TEST_ESCROW_ADDRESS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BITCOIN_NETWORK:-}" ]; then
+            echo "::error::BITCOIN_NETWORK repo variable unset — escrow gate refuse soft-default. Set vars.BITCOIN_NETWORK to signet|testnet|mainnet."
+            exit 1
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            mapfile -t files < <(node scripts/list-changed-proposals.mjs "origin/${{ github.base_ref }}")
+            export ESCROW_COMPARE_REF="origin/${{ github.base_ref }}"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "${BEFORE}" ] || [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
+              mapfile -t files < <(git ls-files 'proposals/**/*.md')
+              export ESCROW_COMPARE_REF=""
+            else
+              mapfile -t files < <(node scripts/list-changed-proposals.mjs "${BEFORE}" "${{ github.sha }}")
+              export ESCROW_COMPARE_REF="${BEFORE}"
+            fi
+          fi
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No proposal files for escrow gate."
             exit 0
           fi
-          export MEMPOOL_API="${MEMPOOL_API:-https://mempool.space/signet/api}"
-          export BITCOIN_NETWORK="${BITCOIN_NETWORK:-signet}"
-          node scripts/check-fee-payments.mjs "${files[@]}"
+          node scripts/check-escrow-address.mjs "${files[@]}"

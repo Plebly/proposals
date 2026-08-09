@@ -26,7 +26,13 @@
     "claim_checkpoint_grace_days": 7,
     "claim_abuse_escalation_threshold": 2,
     "max_site_claim_prs_per_day": 10,
-    "identity_relink_cooldown_days": 7
+    "identity_relink_cooldown_days": 7,
+    "claim_mode_default": "proposer_select",
+    "claim_window_days_presets": [3, 7, 14],
+    "claim_window_days_default": 7,
+    "claim_decision_grace_days": 3,
+    "max_claim_applications": 10,
+    "max_claim_collaborators": 5
   },
   "networks": {
     "signet": {
