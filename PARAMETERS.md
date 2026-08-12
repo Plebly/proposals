@@ -13,7 +13,7 @@ Community parameter votes are not live. Any future ballot system is volume-gated
 | Parameter | Value |
 |-----------|-------|
 | Submission fee | 10,000 sats (exact, non-refundable) |
-| Platform fee | 2.5% of escrow to Plebly at successful disbursement |
+| Platform fee | 3% platform + 2% keyholders (5% of the monthly disbursed set; 500,000 sats cap per signing keyholder) |
 | Milestone threshold | 1,000,000 sats |
 | Claim window | 90 days from claim acceptance |
 | Claim extension | One 30-day extension via reviewer supermajority |
@@ -82,7 +82,7 @@ Temporary claim suspension may be set for: bond fraud, fee/bond txid replay, or 
 |------|----------------------|
 | Submission fee (signet) | `tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz` — currently **shared** with smoke-demo escrow receive; split to a dedicated Sparrow receive when ready |
 | Submission fee (mainnet) | `TBD` (`bc1…`) |
-| Platform ops (fee receive) | Same as submission fee unless published separately (2.5% at disbursement is keyholder-enforced; Worker returns advisory sats) |
+| Platform ops (fee receive) | Same as submission fee unless published separately (3% platform + 2% keyholders of the monthly disbursed set; 500k sat cap per signing keyholder; Worker returns advisory sats) |
 | Claim bond receive | Same as submission fee unless published separately |
 | Escrow receive descriptor template | See `KEYHOLDERS.md` |
 

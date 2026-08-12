@@ -16,6 +16,8 @@ export const PARAMETERS_JSON_PATH = join(PROPOSALS_ROOT, "parameters.json");
  * @typedef {object} SharedParams
  * @property {number} submission_fee_sats
  * @property {number} platform_fee_percent
+ * @property {number} keyholder_fee_percent
+ * @property {number} keyholder_cap_sats
  * @property {number} milestone_threshold_sats
  * @property {number} claim_window_days
  * @property {number} claim_extension_days
@@ -82,6 +84,12 @@ export function resolveParameters(doc, network) {
   if (typeof overlay.claim_floor_sats !== "number") {
     throw new Error(`networks.${net}.claim_floor_sats is required`);
   }
+  if (
+    typeof doc.shared.keyholder_fee_percent !== "number" ||
+    typeof doc.shared.keyholder_cap_sats !== "number"
+  ) {
+    throw new Error("shared.keyholder_fee_percent and keyholder_cap_sats are required");
+  }
   return {
     ...doc.shared,
     claim_floor_sats: overlay.claim_floor_sats,
@@ -106,6 +114,8 @@ export function emitWorkersParametersTs(doc) {
   const body = (p) => `{
   submission_fee_sats: ${p.submission_fee_sats},
   platform_fee_percent: ${p.platform_fee_percent},
+  keyholder_fee_percent: ${p.keyholder_fee_percent},
+  keyholder_cap_sats: ${p.keyholder_cap_sats},
   milestone_threshold_sats: ${p.milestone_threshold_sats},
   claim_floor_sats: ${p.claim_floor_sats},
   claim_window_days: ${p.claim_window_days},
@@ -142,6 +152,8 @@ export type PleblyNetwork = "signet" | "mainnet";
 export type NetworkParameters = {
   submission_fee_sats: number;
   platform_fee_percent: number;
+  keyholder_fee_percent: number;
+  keyholder_cap_sats: number;
   milestone_threshold_sats: number;
   claim_floor_sats: number;
   claim_window_days: number;
@@ -196,6 +208,8 @@ export const SUBMISSION_FEE_SATS = ${p.submission_fee_sats};
 export const CLAIM_FLOOR_SATS = ${p.claim_floor_sats};
 export const MILESTONE_THRESHOLD_SATS = ${p.milestone_threshold_sats};
 export const PLATFORM_FEE_PERCENT = ${p.platform_fee_percent};
+export const KEYHOLDER_FEE_PERCENT = ${p.keyholder_fee_percent};
+export const KEYHOLDER_CAP_SATS = ${p.keyholder_cap_sats};
 export const CLAIM_BOND_SATS = ${p.claim_bond_sats};
 export const MAX_ACTIVE_CLAIMS = ${p.max_active_claims};
 export const CLAIM_PENDING_TTL_HOURS = ${p.claim_pending_ttl_hours};
@@ -233,7 +247,7 @@ export function renderParametersMarkdownTables(doc) {
 | Parameter | Value |
 |-----------|-------|
 | Submission fee | ${formatSats(s.submission_fee_sats)} (exact, non-refundable) |
-| Platform fee | ${s.platform_fee_percent}% of escrow to Plebly at successful disbursement |
+| Platform fee | ${s.platform_fee_percent}% platform + ${s.keyholder_fee_percent}% keyholders (${s.platform_fee_percent + s.keyholder_fee_percent}% of the monthly disbursed set; ${formatSats(s.keyholder_cap_sats)} cap per signing keyholder) |
 | Milestone threshold | ${formatSats(s.milestone_threshold_sats)} |
 | Claim window | ${s.claim_window_days} days from claim acceptance |
 | Claim extension | One ${s.claim_extension_days}-day extension via reviewer supermajority |

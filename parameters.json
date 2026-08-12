@@ -2,7 +2,9 @@
   "schema_version": 1,
   "shared": {
     "submission_fee_sats": 10000,
-    "platform_fee_percent": 2.5,
+    "platform_fee_percent": 3,
+    "keyholder_fee_percent": 2,
+    "keyholder_cap_sats": 500000,
     "milestone_threshold_sats": 1000000,
     "claim_window_days": 90,
     "claim_extension_days": 30,
