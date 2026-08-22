@@ -29,7 +29,7 @@ Plebly is a **public funding surface for Bitcoin work**: proposals live in git, 
 - Replace git as the canonical proposal record.
 - Confiscate unclaimed refunds or take a fee on refunds (Q17).
 
-**Residual trust (v1):** 3-of-5 keyholders can stall after reviewer approval; there is no on-chain timelock. Ops runbook + site stall banner (`/escrow/stall`). Documented in PARAMETERS (Q21).
+**Residual trust (v1):** 3-of-5 keyholders can stall after reviewer approval; there is no on-chain timelock. Clock starts at `disburse_ready`; publicity uses seat numbers. Ops runbook + site stall banner (`/escrow/stall`). Documented in PARAMETERS (Q21) and `docs/dispute-resolution.md`.
 
 ---
 
@@ -518,8 +518,9 @@ CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_
 
 ### Keyholder stall (Q21)
 
-- Hook sets KV `release_blocked:{id}`; site banner.
-- Runbook: `proposals/docs/keyholder-stall-runbook.md`.
+- Clock: `disburse_ready`. Public: seat numbers, not names.
+- Hook sets KV `release_blocked:{id}` (optional `seats`); site banner.
+- Runbook: `proposals/docs/keyholder-stall-runbook.md`. Catalog: `docs/dispute-resolution.md`.
 
 ---
 

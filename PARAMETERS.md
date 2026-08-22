@@ -99,4 +99,8 @@ Workers default: `BITCOIN_NETWORK=signet`, mempool `https://mempool.space/signet
 
 ## Residual trust (Q21)
 
-v1 escrow has **no on-chain timelock** forcing keyholders to sign. If reviewers approve but keyholders stall, ops follows `docs/keyholder-stall-runbook.md` (7d public log / 14d incident) and may set a site `release_blocked_reason` banner via `/escrow/stall`. Escrow mechanism upgrades require a public process with ≥30-day notice.
+v1 escrow has **no on-chain timelock** forcing keyholders to sign. Stall clock starts at `disburse_ready`. Public notices use seat numbers, not names. Ops follows `docs/keyholder-stall-runbook.md` (day 7 public log / day 14 incident + `/escrow/stall` banner). Replacement is a 30-day descriptor notice; the same package waits. Escrow mechanism upgrades require a public process with ≥30-day notice.
+
+## Reviewer arbitration (ratified, payout not live)
+
+Default bounty close: proposer “This is done” → 7-day confirmed-donor flag window → cron auto-`completed` if quiet. One flag opens unpaid `deliverable_confirm`. Dispute ballots (`second_review`, `listing_challenge`, `claim_extension`) are **10,000 sats per yes/no vote cast**, accounted from forfeited claim bonds (same fee-address UTXO set until a later split). Abstain pays 0. Worker/PSBT payout is not implemented. Quiet donors are residual: they were notified; silence authorizes release.
