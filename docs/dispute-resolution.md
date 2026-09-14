@@ -33,7 +33,7 @@ Not paid: funder removal, contributor ballots (including funding `extend`), KH e
 7. **Proposer “This is done.”** Bounty only. Requires a deliverable. Opens a 7-day donor flag window. Confirmed contributors on this project are notified. If the proposer never clicks, do not auto-complete.
 8. **Donor flag (optional).** One confirmed contributor on this project + written reason (≥40 chars) opens unpaid `deliverable_confirm`. 1-sat strangers cannot flag. No extra donor vote after that.
 9. **No flag when the window ends.** Cron auto-`completed` (no `decision_id`) → KH PSBT. Same escrow/payout gates as the outcome hook.
-10. **Flag → human `deliverable_confirm` (unpaid).** Pass iff `yes >= ceil(2/3 * roster)` AND `(yes+no) >= 5` AND `yes > 0`. Failed quorum / idle stays pending. Dissent is a git record, not a third appeal.
+10. **Flag → human `deliverable_confirm` (unpaid).** Pass iff `yes >= ceil(2/3 * roster)` AND `(yes+no) >= min(5, max(3, roster))` AND `yes > 0`. Failed quorum / idle stays pending. Dissent is a git record, not a third appeal.
 11. **Reject → 14-day rebuttal.** One `second_review` (paid later). Second reject or expiry → `claimable`, 30-day cooldown, bond forfeit.
 12. **Approve → `completed`.** Hook + `decision_id` (`deliverable_confirm` or `second_review` only). Then KH PSBT. `ALLOW_FORCE_OUTCOME` is ops break-glass. Live `single-key-test` 403s this path.
 

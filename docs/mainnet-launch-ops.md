@@ -3,6 +3,21 @@
 Executable ops steps for the pre-mainnet gaps in `docs/system-as-implemented.md` §16.
 Signet keeps working while these stay open; **mainnet allocate / fee CI / reviewer quorum** need the items below.
 
+**Bounty money path (2026-09-13):** current-system writeup is [`bounty-psbt.md`](bounty-psbt.md). Monthly / `direct` is still A2 + `outcome: completed`. Do **not** flip until signet **A2b** (structure → hash-gate → Sparrow broadcast → dual-ack settle) has been run. First mainnet bounty spend is a Worker-built unsigned PSBT that humans broadcast — not the monthly auto-broadcast desk.
+
+## A0. Signet bounty rehearsal (flip gate)
+
+Run [`remaining-human-steps.md`](remaining-human-steps.md) §A2b on signet before `flip-to-mainnet.sh`:
+
+1. Allocate a Type 1 bounty (no milestones). Schema freeze must stick (amend of allocations / reserve % / type → 400).
+2. Fund until `GET /proposals/:id/structured-funding` is constructible. Broadcast the structure PSBT in Sparrow. Hook-confirm the txid.
+3. Confirm `refund` / `timelock` / `reserve_refund` exist **before** award.
+4. Award an on-chain payout. Challenge expire or flag selects `clean` or `disputed`.
+5. Keyholders → Branches: hash-gate partials, download combined, broadcast in Sparrow. Dual-ack or hook-confirm settle.
+6. After work outputs settle, confirm `reserve_refund` is selected.
+
+Until that table is ticked, CI is the only proof. Monthly `outcome: completed` still 403s in `single-key-test`; that is a **different** path and does not replace A2b.
+
 ## A. Fee address + Completeness gate
 
 1. Publish the mainnet submission-fee receive address in [`PARAMETERS.md`](../PARAMETERS.md) (replace `TBD`).
@@ -35,7 +50,19 @@ Signet keeps working while these stay open; **mainnet allocate / fee CI / review
    # paste {"0":"bc1…","1":"bc1…",…}
    ```
 4. **v1 does not derive addresses in-Worker** — keep refreshing `ESCROW_ADDRESS_MAP` offline as the index grows.
-5. Smoke: with `BITCOIN_NETWORK=mainnet`, hook `POST /escrow/allocate` must not return `501 pending_keyholders` / `pending_address_map`.
+5. Second published descriptor, **same KH set**, not a hot wallet (needed for Type 1/2 dispute penalty and a real reserve path):
+   ```bash
+   npx wrangler secret put REVIEWER_ESCROW_DESCRIPTOR
+   npx wrangler secret put REVIEWER_ESCROW_ADDRESS_MAP
+   # paste {"0":"bc1…",…} derived in Sparrow from that descriptor
+   ```
+   Half-set (one var only) **fails closed**. Both unset → stand-in on the primary map — acceptable for signet, not for a mainnet dispute path.
+6. Optional dedicated fee outputs on `clean` (else they fall back to ops):
+   ```bash
+   npx wrangler secret put BDI_FEE_ADDRESS
+   npx wrangler secret put KEYHOLDER_POOL_ADDRESS
+   ```
+7. Smoke: with `BITCOIN_NETWORK=mainnet`, hook `POST /escrow/allocate` must not return `501 pending_keyholders` / `pending_address_map`.
 
 ## C. Bootstrap reviewers
 
@@ -61,9 +88,11 @@ Then:
 
 | Item | v1 stance |
 |------|-----------|
-| In-Worker descriptor → address derive | **Deferred** — Sparrow + `ESCROW_ADDRESS_MAP` |
-| Automated refund batching | **Deferred** — `POST /refunds/register` + keyholder batch runbook |
-| Lightning on default signet | **Off by design** — auto-on for mainnet/testnet; signet needs `LIGHTNING_ENABLED=true` |
+| In-Worker descriptor → address derive | **Deferred** — Sparrow + `ESCROW_ADDRESS_MAP` / `REVIEWER_ESCROW_ADDRESS_MAP` |
+| Automated refund batching (**direct**) | **Deferred** — `POST /refunds/register` + keyholder batch runbook |
+| Bounty pool refund | **Shipped** — `refund` / `timelock` / `reserve_refund` branches; humans broadcast |
+| Bounty / monthly PSBT signing or bounty broadcast in Worker | **Never** — humans sign and broadcast bounty combines in Sparrow |
+| Lightning on default signet | **Off by design** — auto-on for mainnet/testnet; signet needs `LIGHTNING_ENABLED=true`. Bounty apply is on-chain only on every network. |
 
 ## E. Related secrets (not in the seven-gap list)
 
@@ -74,6 +103,10 @@ cd workers
 npx wrangler secret put SUBMISSION_FEE_ADDRESS  # mainnet bc1… (signet uses TEST_* vars)
 npx wrangler secret put ESCROW_DESCRIPTOR
 npx wrangler secret put ESCROW_ADDRESS_MAP
+npx wrangler secret put REVIEWER_ESCROW_DESCRIPTOR   # same KH set, second script
+npx wrangler secret put REVIEWER_ESCROW_ADDRESS_MAP
+npx wrangler secret put BDI_FEE_ADDRESS              # optional; else ops
+npx wrangler secret put KEYHOLDER_POOL_ADDRESS       # optional; else ops
 npx wrangler secret put ANTHROPIC_API_KEY       # else AI triage → ambiguous
 npx wrangler secret put X_CLIENT_ID
 npx wrangler secret put X_CLIENT_SECRET
@@ -85,4 +118,4 @@ npx wrangler secret put X_CLIENT_SECRET
 - Branch protection on `Plebly/proposals` `main`: required status check **`validate`**, `enforce_admins`, no force-push.
 - Bootstrap helper: `scripts/bootstrap-reviewers.sh`.
 
-Before flipping `BITCOIN_NETWORK` to `mainnet` in `wrangler.toml` / deploy vars, finish A–C with mainnet values.
+Before flipping `BITCOIN_NETWORK` to `mainnet` in `wrangler.toml` / deploy vars, finish **A0 + A–C** with mainnet values. First mainnet bounty: humans broadcast the combined branch PSBT in Sparrow, then dual-ack or hook-confirm the txid.

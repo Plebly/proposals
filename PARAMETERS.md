@@ -14,6 +14,8 @@ Community parameter votes are not live. Any future ballot system is volume-gated
 |-----------|-------|
 | Submission fee | 10,000 sats (exact, non-refundable) |
 | Platform fee | 3% platform + 2% keyholders (5% of the monthly disbursed set; 500,000 sats cap per signing keyholder) |
+| BDI fee | 1% of disbursed set (Bitcoin District Initiative fiscal sponsorship) |
+| Reviewer reserve | 2% of frozen allocations (structured funding output) |
 | Milestone threshold | 1,000,000 sats |
 | Claim window | 90 days from claim acceptance |
 | Claim extension | One 30-day extension via reviewer supermajority |
@@ -45,7 +47,7 @@ Machine-readable source: [`parameters.json`](./parameters.json). Edit that file,
 | Completion finality confirmations | 3 |
 | Core annual gap | 2,100,000 sats |
 
-Signet fee/bond receive (live): `tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz` (Workers `TEST_SUBMISSION_FEE_ADDRESS`, CI `vars.SUBMISSION_FEE_ADDRESS`). Mainnet fee address remains TBD until ops publishes a `bc1…` (Workers `SUBMISSION_FEE_ADDRESS`).
+Signet fee/bond receive (live): `tb1qehu65p8nw83kmg34ufdzelkjrk7ayslv6adqw2` (Workers `TEST_SUBMISSION_FEE_ADDRESS`, CI `vars.SUBMISSION_FEE_ADDRESS`). Mainnet fee address remains TBD until ops publishes a `bc1…` (Workers `SUBMISSION_FEE_ADDRESS`).
 
 ## Claim abuse mitigations (provisional)
 
@@ -80,7 +82,7 @@ Temporary claim suspension may be set for: bond fraud, fee/bond txid replay, or 
 
 | Role | Address / descriptor |
 |------|----------------------|
-| Submission fee (signet) | `tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz` — currently **shared** with smoke-demo escrow receive; split to a dedicated Sparrow receive when ready |
+| Submission fee (signet) | `tb1qehu65p8nw83kmg34ufdzelkjrk7ayslv6adqw2` — dedicated plebly-sparrow receive; smoke escrow stays `tb1qhj27…` |
 | Submission fee (mainnet) | `TBD` (`bc1…`) |
 | Platform ops (fee receive) | Same as submission fee unless published separately (3% platform + 2% keyholders of the monthly disbursed set; 500k sat cap per signing keyholder; Worker returns advisory sats) |
 | Claim bond receive | Same as submission fee unless published separately |
@@ -93,7 +95,7 @@ Publish mainnet fee address here, then set Worker `SUBMISSION_FEE_ADDRESS` + Git
 | Mode | Chain | Escrow |
 |------|-------|--------|
 | **Testing (now)** | Signet | Single `TEST_ESCROW_ADDRESS` you control — see `TESTING.md` |
-| **Launch** | Mainnet only | 3-of-5 multisig — see `KEYHOLDERS.md` |
+| **Launch** | Mainnet only | 2-of-3 allowed until five seats; target 3-of-5 — see `KEYHOLDERS.md` |
 
 Workers default: `BITCOIN_NETWORK=signet`, mempool `https://mempool.space/signet/api`. Numeric knobs (including per-network claim floor) live in `parameters.json`.
 

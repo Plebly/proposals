@@ -1,10 +1,10 @@
 # Remaining human steps — signet, then mainnet
 
-**Date:** 2026-07-27  
+**Date:** 2026-09-13  
 **Audience:** ops / keyholders / whoever will run live money-path tests  
-**Code status:** High + soft-launch product gaps that can be fixed in code are shipped (Workers + SPA on `main`). Live deploy is still **signet** / `escrow_mode: single-key-test` until you flip. Protocol-repo leftovers land via [Plebly/proposals#7](https://github.com/Plebly/proposals/pull/7). This doc is **only** what humans still must do.
+**Code status:** High + soft-launch product gaps that can be fixed in code are shipped (Workers + SPA on `main`). Bounty structured PSBT path is unit-tested; **A2b signet rehearsal has not been run**. Live deploy is still **signet** / `escrow_mode: single-key-test` until you flip. The [PR #7](https://github.com/Plebly/proposals/pull/7) protocol pack is on proposals `main`. This doc is **only** what humans still must do.
 
-Related: [`system-as-implemented.md`](system-as-implemented.md), [`post-mvp-roadmap.md`](post-mvp-roadmap.md), [`mainnet-launch-ops.md`](mainnet-launch-ops.md), [`TESTING.md`](../proposals/TESTING.md), [`KEYHOLDERS.md`](../proposals/KEYHOLDERS.md), [`REVIEWERS.md`](../proposals/REVIEWERS.md).
+Related: [`bounty-psbt.md`](bounty-psbt.md) (how bounty money moves now), [`system-as-implemented.md`](system-as-implemented.md), [`post-mvp-roadmap.md`](post-mvp-roadmap.md), [`mainnet-launch-ops.md`](mainnet-launch-ops.md), [`TESTING.md`](../proposals/TESTING.md), [`KEYHOLDERS.md`](../proposals/KEYHOLDERS.md), [`REVIEWERS.md`](../proposals/REVIEWERS.md).
 
 ### After MVP
 
@@ -23,17 +23,18 @@ Launch blockers stay in this checklist. Product expansion beyond governance is i
 - Funding-window `extend` ballot → **one-shot** +90d (`fundext:`)
 - Listing challenge UI (eligible funder → reviewer ballot → decline PR)
 - SPA `/declined` archive + funder contributor badges (when amount is public)
-- Platform fee: `completed` outcome returns `platform_fee` advisory (2.5%) for keyholders
+- Platform fee: `completed` outcome returns `platform_fee` advisory (3% platform + 2% keyholders) for keyholders
 - `POST /claims/outcome` `completed` binds to tallied `deliverable_confirm` / `second_review` via `decision_id` (or audited `force:true` + `force_note`; mainnet also needs `ALLOW_FORCE_OUTCOME=true`)
 - Cron auto-tallies expired review / removal / ops-role ballots
 - Flip tooling: `workers/scripts/flip-to-mainnet.sh`, smoke scripts
+- Bounty structured PSBT (Type 1 / Type 2): schema freeze at allocate, structure when pot is full, four-branch constructor, challenge select, hash-gated KH sign, combine **without** broadcast, dual-ack settle. Direct drip is unchanged. Writeup: [`bounty-psbt.md`](bounty-psbt.md).
 
-**Pending merge onto proposals `main` ([PR #7](https://github.com/Plebly/proposals/pull/7)):**
+**Already on proposals `main` ([PR #7](https://github.com/Plebly/proposals/pull/7) and follow-ups):**
 
-- `docs/governance/reviewer-removals.md` seed (removal evidence/result PRs fall back to `REVIEWERS.md` until then)
+- `docs/governance/reviewer-removals.md` seed (removal evidence/result PRs write here)
 - `SEQUENCE.md` + `scripts/assign-sequence.mjs`
-- Allocate-on-merge workflow/script (needs secrets after merge — see A4)
-- PARAMETERS signet fee string alignment + all-zero fee-txid allowlist for seed demos only
+- Allocate-on-merge workflow/script (still needs `secrets.PLEBLY_HOOK_SECRET` if unset — see A4)
+- Signet fee-txid allowlist for seed demos
 
 Live check:
 
@@ -56,7 +57,7 @@ Deployed mode is **`escrow_mode: single-key-test`**. Allocate returns the shared
 
 ### A1. Wallet you control (required for any spend)
 
-Listed demos and Worker `TEST_*` already use **your** Sparrow signet receives (smoke + Knots). Fee currently **shares** the smoke escrow receive — split when ready (A4).
+Listed demos and Worker `TEST_*` already use **your** Sparrow signet receives (smoke + Knots). Fee is a dedicated receive (`tb1qehu65…`) in git; confirm the live Worker + CI var after deploy.
 
 1. Sparrow → Network → **Signet** → wallet that owns the live receives (keys stay local).
 2. Optional: create a **dedicated** fee/bond receive (recommended before serious rehearsal accounting).
@@ -82,14 +83,14 @@ Listed demos and Worker `TEST_*` already use **your** Sparrow signet receives (s
 |------|-------------|--------|
 | Submission fee | Exact **10,000** sats to `TEST_SUBMISSION_FEE_ADDRESS`, keep txid | One-time `paytxid` |
 | Submit / amend | Log in on plebly.fund | GitHub session |
-| Allocate | Hook `POST /escrow/allocate` (or post-merge workflow once #7 + secrets) | Response must show `escrow_mode: "single-key-test"` |
+| Allocate | Hook `POST /escrow/allocate` (or allocate-on-merge once `PLEBLY_HOOK_SECRET` is set) | Response must show `escrow_mode: "single-key-test"` |
 | Donate | Send signet sats to escrow | mempool.space/signet |
 | Claim floor | Fund escrow to **≥ 100,000** sats confirmed | Or temporarily lower floor on a test branch only |
 | Claim bond | Exact **10,000** sats bond, claim in UI | Bond spent at verify even if PR never merges |
 | Deliverable + review | Submit deliverable; vote ballots | Needs reviewers (A3) |
 | Extension (optional) | Fulfiller → **Request 30-day extension** on project | One-shot; reviewers approve; confirm `claim_window_ends_at` |
 | Listing challenge (optional) | Eligible funder on listed/funding/claimable | Opens reviewer ballot; on pass → decline PR → `/declined` |
-| Removal (optional) | Eligible funder on `/reviewers` | Evidence + result PRs (mirror path after #7 merges) |
+| Removal (optional) | Eligible funder on `/reviewers` | Evidence + result PRs write to `docs/governance/reviewer-removals.md` |
 | **Completed / release** | Hook with `decision_id` of tallied approve | **Blocked** until multisig: `outcome: completed` → 403 |
 
 Read-only anytime: `cd workers && npm run smoke:signet`.
@@ -103,9 +104,28 @@ curl -sS -X POST "$API/claims/outcome" \
   -d '{"proposal_id":"…","outcome":"completed","decision_id":"…-deliverable_confirm-r1-…"}'
 ```
 
-Response includes `platform_fee` advisory (`platform_fee_sats`, `fulfiller_sats`, ops address). Keyholders include the 2.5% output at disbursement — Worker never moves funds.
+Response includes `platform_fee` advisory (`platform_fee_sats`, `fulfiller_sats`, ops address). Keyholders include the 3% platform output at disbursement — Worker never moves funds.
 
 `force: true` requires `force_note` (≥8 chars) and writes `forceoutcome:*` audit rows. On mainnet it also needs Worker var `ALLOW_FORCE_OUTCOME=true`. Avoid on real money.
+
+### A2b. Bounty structured PSBT (signet)
+
+Bounty only. Direct stays on the monthly drip / A2 table above. Worker constructs unsigned PSBTs and **never broadcasts**. This table is a **mainnet flip gate**. How the path works: [`bounty-psbt.md`](bounty-psbt.md).
+
+| Step | What you do | Notes |
+|------|-------------|--------|
+| Freeze | Allocate a bounty (no milestones = Type 1) | Locks `psbt_kind`, allocations, reserve % |
+| Fund | Confirmed donate UTXOs ≥ allocations + reserve + miner fee | `GET /proposals/:id/structured-funding` |
+| Structure | Broadcast the unsigned structured PSBT in Sparrow | Hook `POST /proposals/:id/structured-funding/confirm` `{txid}` |
+| Refund path | Available immediately after confirm | `refund` / `timelock` / `reserve_refund` — no award required |
+| Award | Bonded builder with an **on-chain** payout | Adds `clean` + `disputed` |
+| Challenge | Proposer marks done; donors flag or wait | Selects `disputed` or `clean` |
+| Sign | Keyholders → Branches: hash-gate, upload partials | Threshold combines; **no Broadcast button** |
+| Broadcast | Download combined → Sparrow | Humans broadcast |
+| Settle | Propose txid; second KH confirms | Or hook `POST /proposals/:id/branches/:alloc/confirm` |
+| Reserve | After every work output settles | Worker selects `reserve_refund` |
+
+Live check: `GET /proposals/:id/branches` shows `selected` + `signoff`. `GET /keyholders/branch-queue` is keyholder-only.
 
 ### A3. Reviewer quorum (required for review e2e) — YOU
 
@@ -138,7 +158,7 @@ Role **votes** stay gated until ≥10 platform completions and ≥5 active revie
 
 | Item | Why | How |
 |------|-----|-----|
-| Dedicated signet fee receive | Split fees from smoke escrow balance | New Sparrow receive → `TEST_SUBMISSION_FEE_ADDRESS` + CI `vars.SUBMISSION_FEE_ADDRESS` |
+| Dedicated signet fee receive | Split from smoke escrow (in git as `tb1qehu65…`) | Confirm live Worker `TEST_SUBMISSION_FEE_ADDRESS` + CI `vars.SUBMISSION_FEE_ADDRESS` |
 | Allocate-on-merge secrets | Auto escrow after list merge | `vars.PLEBLY_API_URL` set; still need `secrets.PLEBLY_HOOK_SECRET` (= Worker `HOOK_SECRET`) on Plebly/proposals |
 | `ANTHROPIC_API_KEY` | AI first-pass; else ambiguous | `npx wrangler secret put ANTHROPIC_API_KEY` |
 | X OAuth | X login | `X_CLIENT_ID` / `X_CLIENT_SECRET` |
@@ -163,7 +183,7 @@ Lightning still needs `BITCOIN_NETWORK=testnet` (or mainnet); Boltz has no signe
 
 ## Part B — Mainnet launch (human, after signet is good)
 
-Do not flip until Part A spend path and reviewer bootstrap are acceptable. Flip **must** leave the Worker in valid **multisig** mode (descriptor + map present, `TEST_ESCROW_ADDRESS` absent) or traffic is refused.
+Do not flip until Part A spend path, **A2b bounty PSBT rehearsal**, and B2 keyholders are acceptable. Flip **must** leave the Worker in valid **multisig** mode (descriptor + map present, `TEST_ESCROW_ADDRESS` absent) or traffic is refused.
 
 ### B1. Fee address + Completeness
 
@@ -178,10 +198,12 @@ Do not flip until Part A spend path and reviewer bootstrap are acceptable. Flip 
 2. Fill production roster + 3-of-5 descriptor / xpubs in `KEYHOLDERS.md`.
 3. Sparrow-derive receive addresses for indices you will allocate (`0`, `1`, …).
 4. Secrets: `ESCROW_DESCRIPTOR`, `ESCROW_ADDRESS_MAP` (`{"0":"bc1…",…}`).
-5. **Remove** `TEST_ESCROW_ADDRESS` / `TEST_SUBMISSION_FEE_ADDRESS` from Worker vars.
-6. Watch `/health` `escrow_map_remaining`; refresh the map before exhaustion.
+5. Same KH set, second script: `REVIEWER_ESCROW_DESCRIPTOR` + `REVIEWER_ESCROW_ADDRESS_MAP`. Half-set fails closed. Both unset = stand-in (signet-ok, not a real dispute path).
+6. Optional: `BDI_FEE_ADDRESS`, `KEYHOLDER_POOL_ADDRESS` (else ops).
+7. **Remove** `TEST_ESCROW_ADDRESS` / `TEST_SUBMISSION_FEE_ADDRESS` from Worker vars.
+8. Watch `/health` `escrow_map_remaining`; refresh the map before exhaustion.
 
-Keyholders stay **out of band forever** (Sparrow). There is no Worker election UI for keys — by design.
+Keyholders stay **out of band forever** (Sparrow). There is no Worker election UI for keys — by design. Worker combines bounty partials and **never broadcasts** them.
 
 ### B3. Bootstrap reviewers
 
@@ -205,16 +227,18 @@ Confirm:
 | `/claims/params` | fee address `bc1…` (not `tb1…`) |
 | Pages | `VITE_BITCOIN_NETWORK=mainnet` rebuild + deploy |
 | Allocate | `escrow_mode: "multisig"`, unique map address |
-| First LN smoke | Small amount you accept losing to Boltz fees |
-| First `outcome: completed` | Includes `decision_id` + `platform_fee` advisory; cosign release in Sparrow (2.5% ops output) |
+| First LN smoke | Small amount you accept losing to Boltz fees. **Direct only** — bounty apply is on-chain. |
+| First `outcome: completed` | Monthly / direct path. Includes `decision_id` + `platform_fee` advisory; cosign release in Sparrow. Still 403 until multisig. |
+| First bounty settle | Worker-built branch PSBT; humans broadcast in Sparrow; dual-ack or hook records txid. **Not** monthly `completed`. |
 
 ### B5. Soft / deferred (not v1 launch blockers)
 
 | Item | Stance |
 |------|--------|
 | In-Worker descriptor → address derive | Deferred — Sparrow map |
-| Automated refund batching | Deferred — register + keyholder batch |
-| Multisig PSBT signing in Worker | **Never** — human cosign + runbooks |
+| Automated refund batching (**direct**) | Deferred — register + keyholder batch |
+| Bounty pool refund | Shipped — `refund` / `timelock` / `reserve_refund`; humans broadcast |
+| Multisig PSBT signing / bounty broadcast in Worker | **Never** — human cosign + Sparrow broadcast |
 | Community parameter votes | Deferred — publish rules in `PARAMETERS.md` first |
 | Keyholder replacement process | Human / Q21 stall runbook only |
 
@@ -223,19 +247,19 @@ Confirm:
 ## Quick priority order
 
 **Signet (now)**  
-1. Merge [proposals#7](https://github.com/Plebly/proposals/pull/7) (removals mirror / SEQUENCE / allocate-on-merge / fee gate)  
-2. Optional: dedicated Sparrow fee receive ≠ smoke escrow → update `TEST_SUBMISSION_FEE_ADDRESS` + CI var  
-3. Set allocate-on-merge secrets after #7  
-4. Faucet + exact fee/bond + fund escrow to claim floor  
+1. Confirm dedicated fee receive is live (`tb1qehu65…` + CI var)  
+2. Set allocate-on-merge `secrets.PLEBLY_HOOK_SECRET` if not already  
+3. Faucet + exact fee/bond + fund escrow to claim floor  
+4. **A2b bounty PSBT rehearsal** — structure confirm → hash-gate → Sparrow broadcast → dual-ack settle (flip gate)  
 5. **Bootstrap five reviewers** (blocker for any human quorum)  
 6. Optional: Anthropic / X / Nostr; exercise extension + listing challenge + removal  
-7. Remember: no `completed` release until multisig mode  
+7. Remember: no monthly `completed` release until multisig mode. A2b does **not** need that gate.  
 
 **Mainnet (later)**  
-1. **KEYHOLDERS** + Sparrow map; remove `TEST_ESCROW_ADDRESS`  
+1. **KEYHOLDERS** + Sparrow maps (primary + reviewer escrow); remove `TEST_ESCROW_ADDRESS`  
 2. Mainnet fee in PARAMETERS + secrets/vars  
 3. `flip-to-mainnet.sh` + `smoke:mainnet` (`escrow_mode=multisig`)  
-4. First allocate + LN smoke + real cosigned release with `decision_id`  
+4. First allocate + LN smoke (direct) + first bounty Sparrow broadcast + first monthly cosigned `completed`  
 
 ---
 

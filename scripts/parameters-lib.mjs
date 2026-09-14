@@ -17,6 +17,8 @@ export const PARAMETERS_JSON_PATH = join(PROPOSALS_ROOT, "parameters.json");
  * @property {number} submission_fee_sats
  * @property {number} platform_fee_percent
  * @property {number} keyholder_fee_percent
+ * @property {number} bdi_fee_percent
+ * @property {number} reviewer_reserve_percent
  * @property {number} keyholder_cap_sats
  * @property {number} milestone_threshold_sats
  * @property {number} claim_window_days
@@ -42,6 +44,12 @@ export const PARAMETERS_JSON_PATH = join(PROPOSALS_ROOT, "parameters.json");
  * @property {number} claim_abuse_escalation_threshold
  * @property {number} max_site_claim_prs_per_day
  * @property {number} identity_relink_cooldown_days
+ * @property {string} [claim_mode_default]
+ * @property {number[]} [claim_window_days_presets]
+ * @property {number} [claim_window_days_default]
+ * @property {number} [claim_decision_grace_days]
+ * @property {number} [max_claim_applications]
+ * @property {number} [max_claim_collaborators]
  */
 
 /**
@@ -90,6 +98,12 @@ export function resolveParameters(doc, network) {
   ) {
     throw new Error("shared.keyholder_fee_percent and keyholder_cap_sats are required");
   }
+  if (
+    typeof doc.shared.bdi_fee_percent !== "number" ||
+    typeof doc.shared.reviewer_reserve_percent !== "number"
+  ) {
+    throw new Error("shared.bdi_fee_percent and reviewer_reserve_percent are required");
+  }
   return {
     ...doc.shared,
     claim_floor_sats: overlay.claim_floor_sats,
@@ -115,6 +129,8 @@ export function emitWorkersParametersTs(doc) {
   submission_fee_sats: ${p.submission_fee_sats},
   platform_fee_percent: ${p.platform_fee_percent},
   keyholder_fee_percent: ${p.keyholder_fee_percent},
+  bdi_fee_percent: ${p.bdi_fee_percent},
+  reviewer_reserve_percent: ${p.reviewer_reserve_percent},
   keyholder_cap_sats: ${p.keyholder_cap_sats},
   milestone_threshold_sats: ${p.milestone_threshold_sats},
   claim_floor_sats: ${p.claim_floor_sats},
@@ -141,6 +157,12 @@ export function emitWorkersParametersTs(doc) {
   claim_abuse_escalation_threshold: ${p.claim_abuse_escalation_threshold},
   max_site_claim_prs_per_day: ${p.max_site_claim_prs_per_day},
   identity_relink_cooldown_days: ${p.identity_relink_cooldown_days},
+  claim_mode_default: ${JSON.stringify(p.claim_mode_default || "proposer_select")},
+  claim_window_days_presets: ${JSON.stringify(p.claim_window_days_presets || [3, 7, 14])},
+  claim_window_days_default: ${p.claim_window_days_default ?? 7},
+  claim_decision_grace_days: ${p.claim_decision_grace_days ?? 3},
+  max_claim_applications: ${p.max_claim_applications ?? 10},
+  max_claim_collaborators: ${p.max_claim_collaborators ?? 5},
   submission_fee_address: ${JSON.stringify(p.submission_fee_address)},
 }`;
 
@@ -153,6 +175,8 @@ export type NetworkParameters = {
   submission_fee_sats: number;
   platform_fee_percent: number;
   keyholder_fee_percent: number;
+  bdi_fee_percent: number;
+  reviewer_reserve_percent: number;
   keyholder_cap_sats: number;
   milestone_threshold_sats: number;
   claim_floor_sats: number;
@@ -179,6 +203,12 @@ export type NetworkParameters = {
   claim_abuse_escalation_threshold: number;
   max_site_claim_prs_per_day: number;
   identity_relink_cooldown_days: number;
+  claim_mode_default: string;
+  claim_window_days_presets: number[];
+  claim_window_days_default: number;
+  claim_decision_grace_days: number;
+  max_claim_applications: number;
+  max_claim_collaborators: number;
   submission_fee_address: string | null;
 };
 
@@ -209,6 +239,8 @@ export const CLAIM_FLOOR_SATS = ${p.claim_floor_sats};
 export const MILESTONE_THRESHOLD_SATS = ${p.milestone_threshold_sats};
 export const PLATFORM_FEE_PERCENT = ${p.platform_fee_percent};
 export const KEYHOLDER_FEE_PERCENT = ${p.keyholder_fee_percent};
+export const BDI_FEE_PERCENT = ${p.bdi_fee_percent};
+export const REVIEWER_RESERVE_PERCENT = ${p.reviewer_reserve_percent};
 export const KEYHOLDER_CAP_SATS = ${p.keyholder_cap_sats};
 export const CLAIM_BOND_SATS = ${p.claim_bond_sats};
 export const MAX_ACTIVE_CLAIMS = ${p.max_active_claims};
@@ -248,6 +280,8 @@ export function renderParametersMarkdownTables(doc) {
 |-----------|-------|
 | Submission fee | ${formatSats(s.submission_fee_sats)} (exact, non-refundable) |
 | Platform fee | ${s.platform_fee_percent}% platform + ${s.keyholder_fee_percent}% keyholders (${s.platform_fee_percent + s.keyholder_fee_percent}% of the monthly disbursed set; ${formatSats(s.keyholder_cap_sats)} cap per signing keyholder) |
+| BDI fee | ${s.bdi_fee_percent}% of disbursed set (Bitcoin District Initiative fiscal sponsorship) |
+| Reviewer reserve | ${s.reviewer_reserve_percent}% of frozen allocations (structured funding output) |
 | Milestone threshold | ${formatSats(s.milestone_threshold_sats)} |
 | Claim window | ${s.claim_window_days} days from claim acceptance |
 | Claim extension | One ${s.claim_extension_days}-day extension via reviewer supermajority |

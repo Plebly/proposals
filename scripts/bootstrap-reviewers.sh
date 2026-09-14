@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Seed exactly five bootstrap reviewer seats via the Worker hook.
+# Seed 3–5 bootstrap reviewer seats via the Worker hook.
 # Usage:
+#   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:a github:b github:c
 #   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:a github:b github:c github:d github:e
+# A later run may add seats up to five if it includes every id already seated.
 # Optional:
 #   API=https://plebly-api.securesovereigns.workers.dev
 set -euo pipefail
@@ -14,9 +16,9 @@ if [[ -z "${HOOK_SECRET:-}" ]]; then
   exit 1
 fi
 
-if [[ "$#" -ne 5 ]]; then
-  echo "bootstrap requires exactly 5 user ids (got $#)." >&2
-  echo "example: $0 github:alice github:bob github:carol github:dave github:erin" >&2
+if [[ "$#" -lt 3 || "$#" -gt 5 ]]; then
+  echo "bootstrap requires 3–5 user ids (got $#)." >&2
+  echo "example: $0 github:alice github:bob github:carol" >&2
   exit 1
 fi
 
@@ -43,4 +45,4 @@ fi
 echo "Verify: curl -sS $API/reviewers | python3 -m json.tool"
 curl -sS "$API/reviewers" | python3 -m json.tool
 echo
-echo "Next: mirror the five identities into REVIEWERS.md and open a PR."
+echo "Next: mirror the identities into REVIEWERS.md and open a PR."

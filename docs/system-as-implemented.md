@@ -6,9 +6,9 @@
 **Escrow mode (live):** `single-key-test` (`/health.escrow_mode`)  
 **API:** https://plebly-api.securesovereigns.workers.dev (Workers `main` @ `a50b4c8`)  
 **Site:** https://plebly.fund (SPA `main` @ `e9c6168`)  
-**Proposals `main` tip:** Sparrow signet escrows landed ([PR #6](https://github.com/Plebly/proposals/pull/6)); soft-launch protocol pack open as [PR #7](https://github.com/Plebly/proposals/pull/7)
+**Proposals `main` tip:** Sparrow signet escrows ([PR #6](https://github.com/Plebly/proposals/pull/6)); soft-launch protocol pack landed ([PR #7](https://github.com/Plebly/proposals/pull/7))
 
-Related docs: [`remaining-human-steps.md`](remaining-human-steps.md) (ops checklist — human-only leftovers), [`post-mvp-roadmap.md`](post-mvp-roadmap.md) (after-MVP engineering plan), `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` / `REVIEWERS.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
+Related docs: [`bounty-psbt.md`](bounty-psbt.md) (bounty money path as of 2026-09-13), [`remaining-human-steps.md`](remaining-human-steps.md) (ops checklist — human-only leftovers), [`post-mvp-roadmap.md`](post-mvp-roadmap.md) (after-MVP engineering plan), [`mainnet-launch-ops.md`](mainnet-launch-ops.md), `PARAMETERS.md` / `KEYHOLDERS.md` / `TESTING.md` / `REVIEWERS.md` in [Plebly/proposals](https://github.com/Plebly/proposals); design history in this folder (`open-questions-resolved.md`, `implementation-plan.md`, `plebly-technical-infrastructure-v4.md`).
 
 ---
 
@@ -25,11 +25,11 @@ Plebly is a **public funding surface for Bitcoin work**: proposals live in git, 
 
 **What the platform does not do**
 
-- Hold production multisig keys or auto-spend escrow (Workers never sign releases).
+- Hold production multisig keys or auto-spend escrow (Workers never sign releases). The Worker may construct **unsigned** PSBTs for keyholder review.
 - Replace git as the canonical proposal record.
-- Confiscate unclaimed refunds or take a fee on refunds (Q17).
+- Confiscate unclaimed refunds or take a fee on refunds. Bounty structured-funding refunds use a single descriptor pool address (Q17 replaced for bounty). Direct stays per-donor.
 
-**Residual trust (v1):** 3-of-5 keyholders can stall after reviewer approval; there is no on-chain timelock. Clock starts at `disburse_ready`; publicity uses seat numbers. Ops runbook + site stall banner (`/escrow/stall`). Documented in PARAMETERS (Q21) and `docs/dispute-resolution.md`.
+**Residual trust (v1):** 3-of-5 keyholders can stall after reviewer approval. Bounty structured branches include an `nLockTime` pool-refund path; the monthly / direct path has no on-chain forced spend. Stall clock starts at `disburse_ready` (monthly) or `branch_ready` (bounty). Publicity uses seat numbers. Ops runbook + site stall banner (`/escrow/stall`). Documented in PARAMETERS (Q21) and `docs/dispute-resolution.md`.
 
 ---
 
@@ -227,7 +227,7 @@ Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed 
 
 `POST /claims/outcome` with `outcome: "completed"` (authorize keyholder disbursement after review) calls `assertMultisigForRelease`. In `single-key-test` it returns **403** `multisig_required_for_release`. On multisig, non-forced completion requires a tallied approve on `deliverable_confirm` or `second_review` — preferably via explicit `decision_id` (`resolveReleaseDecision`). `claim_extension` / `listing_challenge` approves **cannot** authorize release.
 
-`force: true` skips the decision gate and writes an immutable `forceoutcome:{id}` audit row (+ index). It always requires `force_note` (≥8 chars). On mainnet it also requires Worker var `ALLOW_FORCE_OUTCOME=true` (signet still allows force with a note). Successful `completed` responses include a `platform_fee` advisory (`percent: 2.5`, `platform_fee_sats`, `fulfiller_sats`, ops address) — Worker never moves funds. Rejected outcomes are unchanged. Workers still do not sign PSBTs — only gate the ops completion path.
+`force: true` skips the decision gate and writes an immutable `forceoutcome:{id}` audit row (+ index). It always requires `force_note` (≥8 chars). On mainnet it also requires Worker var `ALLOW_FORCE_OUTCOME=true` (signet still allows force with a note). Successful `completed` responses include a `platform_fee` advisory (`percent: 2.5`, `platform_fee_sats`, `fulfiller_sats`, ops address) — Worker never signs. Rejected outcomes are unchanged. Workers may construct unsigned PSBTs and gate the ops completion path.
 
 ---
 
@@ -390,9 +390,9 @@ Any active reviewer: `POST /reviewers/decisions/:id/dissent` → GitHub App PR a
 - Contributor ballot winner `extend` on `underfunded` / `idle_claimable` → `grantFundingExtension` (+90d, one-shot) and PR-patch `funding_window_ends_at` (+ restore `listed`).
 - Record: `fundext:{proposalId}` in USERS KV.
 
-### Platform fee (2.5%)
+### Platform fee
 
-- Worker never moves funds. On `completed` outcome, response includes `platform_fee` advisory (`platform_fee_sats`, `fulfiller_sats`, ops address) for keyholder disbursement.
+- Bounty clean branches use `parameters.json`: `platform_fee_percent` 3, `bdi_fee_percent` 1, `keyholder_fee_percent` 2. Worker never signs escrow spends. On monthly / direct `completed`, response includes a `platform_fee` advisory (`platform_fee_sats`, `fulfiller_sats`, ops address) for keyholder disbursement.
 
 ### Listing challenge
 
@@ -413,7 +413,7 @@ Any active reviewer: `POST /reviewers/decisions/:id/dissent` → GitHub App PR a
 - Vote: ⅔ of votes cast; quorum ≥5 participating (or all eligible if &lt;5).
 - Bootstrap seats **cannot** be removed. Target cannot vote on their own ballot. **30-day cooldown** after any tally against a target.
 - Routes: `/reviewers/removals/*` (list open via `GET /reviewers/removals`). KV: `revremove:`, `revremoveopen:`, `revremove:openindex`, `revremovecd:`.
-- **Git mirror (best-effort):** on open → evidence PR; on tally → result PR. Canonical file `proposals/docs/governance/reviewer-removals.md` (`lib/removal-git.ts`); falls back to appending under `REVIEWERS.md` if the mirror path is missing on `main` (**still missing until [PR #7](https://github.com/Plebly/proposals/pull/7) merges**). Ballot view may include `evidence_pr_url` / `result_pr_url`. Ballot open/tally still succeeds if GitHub App is unavailable.
+- **Git mirror (best-effort):** on open → evidence PR; on tally → result PR. Canonical file `proposals/docs/governance/reviewer-removals.md` (`lib/removal-git.ts`); falls back to appending under `REVIEWERS.md` if the mirror path is missing. Ballot view may include `evidence_pr_url` / `result_pr_url`. Ballot open/tally still succeeds if GitHub App is unavailable.
 
 ### Abuse / gaming mitigations (resolution layer)
 
@@ -515,10 +515,26 @@ CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_
 - Contributors register refund address on indexed outpoint (`POST /refunds/register`).
 - Ops list via hook. Dust / batch rules are policy for keyholders; **no platform fee** on refunds.
 - Automated batch payouts are **not** Worker-implemented.
+- Bounty structured refunds pay a single donor-pool address (next receive index on the project escrow descriptor). Per-donor Q17 claims do not apply to those branches.
+
+### Bounty structured PSBT
+
+**Full current-system writeup:** [`bounty-psbt.md`](bounty-psbt.md). The rest of this file is still the 2026-07-27 monthly-release description; this subsection is the bounty add-on.
+
+Bounty only. Direct stays on the drip model — no template, no challenge window, no branch PSBTs. Worker constructs unsigned PSBTs and never signs or broadcasts.
+
+1. Allocate freezes `psbt_kind` (`single` | `milestone`), allocations, and reviewer reserve %. Amend of those fields after allocate → 400.
+2. Structured funding constructs when confirmed donate UTXOs ≥ allocations + reserve + miner fee. Confirm is hook + txid (`verifySettleTx`); writes outpoints.
+3. After structured funding is `confirmed`, Worker constructs `refund`, `timelock` (`nLockTime` = now + `DELIVERY_WINDOW_DAYS`), and `reserve_refund` (when reserve covers fee + dust). `clean` and `disputed` (1% penalty → reviewer escrow) wait for an awarded on-chain payout. Ballot `refund` selects the pool-refund branches and skips per-donor Q17 packages. Cron selects `timelock` when nLockTime is reached and no pay/refund path is already selected.
+4. Clean outputs: builder + 1% BDI + `platform_fee_percent` + 2% KH. Published hash is SHA-256 of raw PSBT bytes.
+5. Challenge window selects `clean` or `disputed`. After every work output settles, Worker selects `reserve_refund`. Keyholders hash-gate partials; Worker combines at threshold. Dual-ack or hook records the Sparrow txid against selected outputs.
+
+Reviewer escrow is a second published descriptor (`REVIEWER_ESCROW_DESCRIPTOR` + map) or a stand-in on the primary map / `single-key-test`.
 
 ### Keyholder stall (Q21)
 
-- Clock: `disburse_ready`. Public: seat numbers, not names.
+- Clock: `disburse_ready` (monthly) or `branch_ready_at` (bounty). Public: seat numbers, not names.
+- Bounty challenge expire: `processDueStalls` selects `clean` after 7/14/30 days from `branch_ready_at` (does not broadcast, does not run monthly release). Does not override disputed/refund/timelock.
 - Hook sets KV `release_blocked:{id}` (optional `seats`); site banner.
 - Runbook: `proposals/docs/keyholder-stall-runbook.md`. Catalog: `docs/dispute-resolution.md`.
 
@@ -594,7 +610,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Funding window | 180 days from allocate; **one** +90d extension via contributor `extend` ballot |
 | Idle → ballot | 365 days |
 | Vote / funding confirmations | 3 |
-| Platform fee | 2.5% at successful disbursement (advisory on `completed`; keyholders enforce) |
+| Platform fee | 3% platform + 2% keyholders at successful disbursement (advisory on `completed`; keyholders enforce) |
 | Badge thresholds | Notable 21k / Major 100k / Patron 1M sats per proposal |
 | Reviewer quorum | ⌈⅔ roster⌉ yes + ≥5 non-abstain |
 | Bootstrap seats / threshold | 5 seats / 10 completions (**live count: 0**) |
@@ -631,29 +647,32 @@ Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle,
 ## 16. Explicit gaps / TBD (do not assume done)
 
 Human checklist: [`remaining-human-steps.md`](remaining-human-steps.md).  
-Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
+Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).  
+Bounty path: [`bounty-psbt.md`](bounty-psbt.md).
 
 | Gap | Notes |
 |-----|-------|
-| Dedicated signet fee receive | Fee currently shares smoke escrow `tb1qhj27…` — split Sparrow receive + update Worker/CI vars |
+| Dedicated signet fee receive | In git (`tb1qehu65…`); confirm live Worker + CI var after deploy |
 | Bootstrap reviewer identities | **Not seeded** (`count: 0`) — `scripts/bootstrap-reviewers.sh` + `REVIEWERS.md` (exactly five final ids; seats permanent) |
 | KEYHOLDERS production xpubs / descriptor | Still TBD; required for `escrow_mode=multisig` (descriptor + map, no `TEST_ESCROW_ADDRESS`) |
 | Mainnet fee address in PARAMETERS | Mainnet still `TBD` (`bc1…` required); signet CI var set |
 | Signet cannot authorize release | By design: `outcome: completed` → 403 in `single-key-test`; needs multisig mode |
-| Merge soft-launch protocol pack | [PR #7](https://github.com/Plebly/proposals/pull/7): `reviewer-removals.md`, SEQUENCE, allocate-on-merge, PARAMETERS/fee-gate |
-| Allocate-on-merge secrets | After #7: `secrets.PLEBLY_HOOK_SECRET` + `vars.PLEBLY_API_URL` on Plebly/proposals |
+| Allocate-on-merge secrets | Workflow is on `main`; still need `secrets.PLEBLY_HOOK_SECRET` + `vars.PLEBLY_API_URL` on Plebly/proposals if unset |
 | Descriptor → address derivation in Worker | **v1 deferred** — Sparrow-precomputed `ESCROW_ADDRESS_MAP` only |
-| Multisig PSBT signing in Worker | Never — human keyholders + Sparrow / runbooks |
+| Multisig PSBT signing / bounty broadcast in Worker | Never — human keyholders + Sparrow / runbooks. Bounty combine is `broadcast: false` |
+| Signet A2b bounty rehearsal | **Not run** — CI only. Flip gate in `mainnet-launch-ops.md` §A0 |
+| Reviewer escrow descriptor | Unset live — stand-in until `REVIEWER_ESCROW_DESCRIPTOR` + map |
+| Q21 publicity stall | Still hook `POST /escrow/stall`. Bounty challenge expire is `processDueStalls` (7/14/30 from `branch_ready_at`) |
 | Community parameter votes | Stub only — publish rules in `PARAMETERS.md` before implementing |
 | Anthropic key in production | Unset live (`ai_review: false`); without it AI → ambiguous |
 | X OAuth credentials | Unset live (`x_oauth: false`) |
 | Nostr ops fanout | `NOSTR_OPS_NSEC` unset |
 | Lightning on signet | **Always off** — auto-on mainnet; LN staging via `BITCOIN_NETWORK=testnet` |
 | Ops suspend of other users | Self-only today |
-| Automated refund batching | **v1 deferred** — register + keyholder batch only |
+| Automated refund batching (**direct**) | **v1 deferred** — register + keyholder batch only. Bounty uses pool-refund branches |
 | Browser / e2e suite | Unit/HTTP only — no Playwright against live UI |
 
-**Already shipped (not gaps):** escrow mode hard boundary; Sparrow signet demo escrows on proposals `main` (#6); flip script + mainnet/signet smokes; Pages network vars; Completeness `validate` on `main`; reviewer decisions + funder removal; **one-shot** claim/funding extensions; listing challenge (API + SPA); `/declined` + contributor badges; platform-fee advisory; hardened `force` outcome; ops-role nominate/vote/tally + volume gate; removal git mirror code; cron governance tallies; `decision_id` release binding + force audit.
+**Already shipped (not gaps):** escrow mode hard boundary; Sparrow signet demo escrows on proposals `main` (#6); flip script + mainnet/signet smokes; Pages network vars; Completeness `validate` on `main`; reviewer decisions + funder removal; **one-shot** claim/funding extensions; listing challenge (API + SPA); `/declined` + contributor badges; platform-fee advisory; hardened `force` outcome; ops-role nominate/vote/tally + volume gate; removal git mirror code; cron governance tallies; `decision_id` release binding + force audit; **bounty structured PSBT** constructor + hash-gated sign/combine (CI only — A2b not run).
 
 ---
 
@@ -673,7 +692,7 @@ Launch ops runbook: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 2. Reviewer merges → cron sets `claimed_at` from `merged_at`.
 3. Checkpoint by day 45 (+grace); deliverable submit → AI first-pass → reviewer ballot (unless clear fail).
 4. Optional: fulfiller requests **one** 30-day claim extension → reviewers approve → `claim_window_ends_at` moves (second request → 409).
-5. Hook outcome `completed` with `decision_id` of tallied `deliverable_confirm` / `second_review` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat + `platform_fee` advisory; keyholders cosign the on-chain release (incl. 2.5% ops output) out-of-band.
+5. Hook outcome `completed` with `decision_id` of tallied `deliverable_confirm` / `second_review` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat + `platform_fee` advisory; keyholders cosign the on-chain release (incl. 3% platform output) out-of-band.
 
 ### C. Failure / abandon / listing challenge
 
