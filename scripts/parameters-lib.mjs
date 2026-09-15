@@ -158,7 +158,7 @@ export function emitWorkersParametersTs(doc) {
   max_site_claim_prs_per_day: ${p.max_site_claim_prs_per_day},
   identity_relink_cooldown_days: ${p.identity_relink_cooldown_days},
   claim_mode_default: ${JSON.stringify(p.claim_mode_default || "proposer_select")},
-  claim_window_days_presets: ${JSON.stringify(p.claim_window_days_presets || [3, 7, 14])},
+  claim_window_days_presets: ${JSON.stringify(p.claim_window_days_presets || [3, 7, 14, 30, 90])},
   claim_window_days_default: ${p.claim_window_days_default ?? 7},
   claim_decision_grace_days: ${p.claim_decision_grace_days ?? 3},
   max_claim_applications: ${p.max_claim_applications ?? 10},

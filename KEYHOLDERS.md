@@ -40,6 +40,17 @@ This is the launch gate. Reviewer bootstrap is not. Target is 3-of-5 in Sparrow.
 
 Two of three can spend. That is weaker than 3-of-5. Coins already at a 2-of-3 address do not move to a later 3-of-5 without a spend. Grow by 30-day descriptor notice + new map, not by editing this file after sats arrive.
 
+## Identity onboarding (site)
+
+Two layers. Do not mix them.
+
+1. **Custody** — this file + Sparrow `wsh(sortedmulti)` + `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP`. Coins move only when those humans sign.
+2. **Worker registry** — GitHub ↔ fingerprint / xpub so the site can show a roster and later seats can be co-attested.
+
+**First two Worker seats (chicken-and-egg):** co-attest needs two actives, so the SPA apply path cannot start the roster. Ops runs [`scripts/bootstrap-keyholders-genesis.sh`](scripts/bootstrap-keyholders-genesis.sh) once (`POST /keyholders/genesis`). Those two become `active` immediately. A third Sparrow cosigner is invited or applies after, and the pair co-attests. Never paste a seed.
+
+**Later seats:** `/keyholders` — earn a review, apply, register keys, two actives co-attest. That form does **not** update this descriptor.
+
 ## Rules
 
 - No organization or individual holds more than one escrow key.
