@@ -39,10 +39,11 @@ Launch blockers stay in this checklist. Product expansion beyond governance is i
 Live check:
 
 ```bash
-curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq '{ok,network,escrow_mode,escrow_ready,escrow_descriptor_set,escrow_test_address_set,lightning_enabled,ai_review,x_oauth,mainnet_secrets_present}'
+curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq '{ok,network,escrow_mode,escrow_ready,escrow_descriptor_set,escrow_test_address_set,lightning_enabled,fee_address_mode,ai_review,x_oauth,mainnet_secrets_present}'
 # expect today: ok=true, network=signet, escrow_mode=single-key-test,
 #               escrow_ready=true, escrow_test_address_set=true, lightning_enabled=false,
-#               ai_review=false, x_oauth=false, mainnet_secrets_present=false
+#               fee_address_mode=shared until A1b, ai_review=false, x_oauth=false,
+#               mainnet_secrets_present=false
 curl -sS https://plebly-api.securesovereigns.workers.dev/reviewers | jq .count
 # expect: 0 until you bootstrap
 ```
@@ -77,16 +78,38 @@ Listed demos and Worker `TEST_*` already use **your** Sparrow signet receives (s
 5. Keep listed demo `escrow_address` fields aligned with Sparrow (already done for smoke + Knots).
 6. Faucet fund fee + escrow addresses as needed.
 
+### A1b. Unique fee/bond receives (assignment is the toggle)
+
+No `FEE_UNIQUE` flag. Unique mode turns **on the moment** watch-only receive material is assigned. Until then, every session is issued the shared `tb1qehu65…` and a chain watcher can still reuse that txid.
+
+Do this **before** a new 10k fee/bond. If a shared-address payment is already sitting unused, submit that listing first — unique mode will not accept it.
+
+1. In **plebly-sparrow** (Signet), export the **account** xpub/tpub. Never an xprv. Raise the gap so new receive indexes are visible.
+2. Assign it (secret, no redeploy required for secrets):
+   ```bash
+   cd workers
+   npx wrangler secret put FEE_RECEIVE_XPUB
+   # paste tpub/xpub
+   ```
+   Or, instead of an xpub, paste unused receives as a map (var or secret) and redeploy:
+   `FEE_ADDRESS_MAP='{"0":"tb1…","1":"tb1…"}'`
+3. Confirm the toggle flipped:
+   ```bash
+   curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq .fee_address_mode
+   # expect: "unique"
+   ```
+4. After this, pay **only** the address shown while signed in. New payments to the published shared address do not count.
+
 ### A2. Money-path rehearsal (opt-in spend)
 
 | Step | What you do | Notes |
 |------|-------------|--------|
-| Submission fee | Exact **10,000** sats to `TEST_SUBMISSION_FEE_ADDRESS`, keep txid | One-time `paytxid` |
+| Submission fee | Sign in → last step issues **your** address → exact **10,000** sats | Shared `tb1qehu65…` only before A1b. After A1b, pay the issued address |
 | Submit / amend | Log in on plebly.fund | GitHub session |
 | Allocate | Hook `POST /escrow/allocate` (or allocate-on-merge once `PLEBLY_HOOK_SECRET` is set) | Response must show `escrow_mode: "single-key-test"` |
 | Donate | Send signet sats to escrow | mempool.space/signet |
 | Claim floor | Fund escrow to **≥ 100,000** sats confirmed | Or temporarily lower floor on a test branch only |
-| Claim bond | Exact **10,000** sats bond, claim in UI | Bond spent at verify even if PR never merges |
+| Claim bond | Exact **10,000** sats to the issued bond address | Same A1b toggle as the listing fee |
 | Deliverable + review | Submit deliverable; vote ballots | Needs reviewers (A3) |
 | Extension (optional) | Fulfiller → **Request 30-day extension** on project | One-shot; reviewers approve; confirm `claim_window_ends_at` |
 | Listing challenge (optional) | Eligible funder on listed/funding/claimable | Opens reviewer ballot; on pass → decline PR → `/declined` |
@@ -159,6 +182,7 @@ Role **votes** stay gated until ≥10 platform completions and ≥5 active revie
 | Item | Why | How |
 |------|-----|-----|
 | Dedicated signet fee receive | Split from smoke escrow (in git as `tb1qehu65…`) | Confirm live Worker `TEST_SUBMISSION_FEE_ADDRESS` + CI `vars.SUBMISSION_FEE_ADDRESS` |
+| Unique fee/bond receives (A1b) | Stops txid front-run on the public address | `FEE_RECEIVE_XPUB` or `FEE_ADDRESS_MAP` — `/health` `fee_address_mode=unique` |
 | Allocate-on-merge secrets | Auto escrow after list merge | `vars.PLEBLY_API_URL` set; still need `secrets.PLEBLY_HOOK_SECRET` (= Worker `HOOK_SECRET`) on Plebly/proposals |
 | `ANTHROPIC_API_KEY` | AI first-pass; else ambiguous | `npx wrangler secret put ANTHROPIC_API_KEY` |
 | X OAuth | X login | `X_CLIENT_ID` / `X_CLIENT_SECRET` |
@@ -177,7 +201,23 @@ Default signet is **not** a 3-of-5 dress rehearsal. To rehearse multisig **befor
 5. Allocate (per-index addresses), then `outcome: completed` with `decision_id` is allowed by the Worker gate.
 6. Actual cosign / broadcast of the release tx remains a human Sparrow operation.
 
-Lightning still needs `BITCOIN_NETWORK=testnet` (or mainnet); Boltz has no signet pair.
+Lightning still needs `BITCOIN_NETWORK=testnet` (or mainnet); OpenNode is not signet escrow. LN stays off on the default signet deploy.
+
+### OpenNode Lightning (after Worker code is deployed)
+
+Do **not** paste keys into chat. Do **not** copy the Intelligence invoice key onto `plebly-api`.
+
+1. `OPENNODE_WITHDRAW_KEY` = the Plebly withdrawal-permission key. **No IP whitelist**.
+2. Invoice-permission key on the **same Plebly OpenNode account** → `OPENNODE_API_KEY`.
+3. Dashboard: auto-settle off; webhook on the live Worker origin `/lightning/webhook`.
+4. Confirm live on-chain withdraw min/fee (working number **200k sats + 1%**).
+5. LN stays off on signet until a mainnet Worker + one sweep UTXO on escrow.
+
+```bash
+cd workers
+npx wrangler secret put OPENNODE_API_KEY
+npx wrangler secret put OPENNODE_WITHDRAW_KEY
+```
 
 ---
 
@@ -188,6 +228,7 @@ Do not flip until Part A spend path, **A2b bounty PSBT rehearsal**, and B2 keyho
 ### B1. Fee address + Completeness
 
 1. Publish mainnet fee address in `PARAMETERS.md` (replace `TBD` with a real `bc1…`).
+1b. Assign `FEE_RECEIVE_XPUB` or `FEE_ADDRESS_MAP` — that is the unique-receive toggle (`/health` `fee_address_mode=unique`).
 2. `npx wrangler secret put SUBMISSION_FEE_ADDRESS`
 3. GitHub vars on `Plebly/proposals`: `SUBMISSION_FEE_ADDRESS`, `BITCOIN_NETWORK=mainnet`, `MEMPOOL_API=https://mempool.space/api`
 4. Confirm fee gate on PRs no longer skips; all-zero fee txids fail on mainnet
@@ -224,10 +265,10 @@ Confirm:
 | Check | Expect |
 |-------|--------|
 | `/health` | `network=mainnet`, `escrow_mode=multisig`, `escrow_ready=true`, `escrow_descriptor_set=true`, `escrow_test_address_set=false`, `escrow_map_remaining≥1`, `lightning_enabled=true` (unless forced off) |
-| `/claims/params` | fee address `bc1…` (not `tb1…`) |
+| `/claims/params` | `fee_address_mode=unique`, published ops `bc1…` (not `tb1…`) |
 | Pages | `VITE_BITCOIN_NETWORK=mainnet` rebuild + deploy |
 | Allocate | `escrow_mode: "multisig"`, unique map address |
-| First LN smoke | Small amount you accept losing to Boltz fees. **Direct only** — bounty apply is on-chain. |
+| First LN smoke | After OpenNode secrets: a donation that can wait for the 0.002 BTC sweep. **Direct only** — bounty apply is on-chain. |
 | First `outcome: completed` | Monthly / direct path. Includes `decision_id` + `platform_fee` advisory; cosign release in Sparrow. Still 403 until multisig. |
 | First bounty settle | Worker-built branch PSBT; humans broadcast in Sparrow; dual-ack or hook records txid. **Not** monthly `completed`. |
 

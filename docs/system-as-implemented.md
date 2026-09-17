@@ -243,10 +243,10 @@ Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed 
 
 ### Lightning (Boltz reverse swap)
 
-- Enabled automatically on mainnet/testnet; **always off on signet** (Boltz has no signet pair).
+- Enabled automatically on mainnet/testnet; **always off on signet** (OpenNode is not signet escrow).
 - UI gated by `lightningUiAllowed()` (signet always hidden).
 - `POST /lightning/invoice` verifies proposal escrow, creates reverse swap, stores encrypted secrets in `SWAPS`.
-- Cron claimer broadcasts claim into escrow; floor still uses on-chain confirmed balance only.
+- Cron polls OpenNode charges and batches on-chain withdraws into escrow; floor still uses on-chain confirmed balance only.
 - Mainnet prefers confirmed lockup before claim broadcast; signet allows mempool claim for speed.
 - Contributions upgraded to confirmed at **≥3** confs (`FUNDING_CONFIRMATIONS`).
 
@@ -721,7 +721,7 @@ Bounty path: [`bounty-psbt.md`](bounty-psbt.md).
 | Ops roles | `lib/ops-roles.ts`, `lib/ops-role-ballots.ts`, `lib/ops-role-params.ts`, `routes/ops.ts` |
 | Contrib / ballots / refunds | `lib/contrib.ts`, `lib/ballots.ts`, `routes/contributions.ts`, `routes/ballots.ts`, `routes/refunds.ts` |
 | Escrow mode / allocate | `lib/escrow-mode.ts`, `lib/escrow-allocate.ts`, `routes/escrow.ts`, `__tests__/escrow-mode.test.ts` |
-| LN | `lib/claimer.ts`, `lib/boltz.ts`, `routes/lightning.ts` |
+| LN | `lib/opennode.ts`, `lib/opennode-settle.ts`, `routes/lightning.ts` |
 | Auth | `routes/auth.ts` (GitHub, X PKCE, Nostr) |
 | Propose / amend | `workers/src/routes/proposals.ts`, `lib/yaml-fm.ts`, `lib/proposal-deps.ts`, `lib/proposer-match.ts` |
 | Frontend | `plebly.fund/src/{main,router,declined-page,badges,stats-page,propose-page,propose-milestones,propose-deps,proposal-page,proposal-ui,proposal-engagement,builder-panel,review-panel,listing-challenge-panel,governance-page,reviewers,ops-roles,fee-pay,github,frontmatter,tag-input}.ts` |

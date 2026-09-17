@@ -26,7 +26,10 @@ Until that table is ticked, CI is the only proof. Monthly `outcome: completed` s
    cd workers
    npx wrangler secret put SUBMISSION_FEE_ADDRESS
    # paste bc1… address
+   npx wrangler secret put FEE_RECEIVE_XPUB
+   # paste watch-only account xpub/tpub (never xprv)
    ```
+   Assignment of `FEE_RECEIVE_XPUB` or `FEE_ADDRESS_MAP` **is** the unique-receive toggle. `/health` `fee_address_mode` becomes `unique` immediately. No separate flag.
 3. Set GitHub Actions repo variables on `Plebly/proposals`:
    ```bash
    gh variable set SUBMISSION_FEE_ADDRESS -R Plebly/proposals --body 'bc1…'
