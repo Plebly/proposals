@@ -14,19 +14,20 @@ Related docs: [`bounty-psbt.md`](bounty-psbt.md) (bounty money path as of 2026-0
 
 ## 1. Purpose and trust model
 
-Plebly is a **public funding surface for Bitcoin work**: proposals live in git, sats sit at **on-chain escrow addresses**, builders claim exclusivity with a bond, and reviewers / keyholders execute outcomes under published rules.
+Plebly is a **public funding surface for Bitcoin work**: listings live in the Worker catalog, sats sit at **on-chain escrow addresses**, builders claim exclusivity with a bond, and reviewers / keyholders execute outcomes under published rules.
 
 **What the platform does**
 
-- Host the site and Workers API (auth, claims, fees, Lightning claimer, ballots).
-- Open GitHub PRs into `Plebly/proposals` (GitHub App).
+- Host the site and Workers API (auth, claims, fees, Lightning, ballots, listing catalog).
+- Persist listed projects in Worker KV (`putProposalDoc` / catalog). GitHub is a fallback read path, not the live listing record.
+- Publish fees and keyholder rules in `Plebly/proposals` (`PARAMETERS.md`, `KEYHOLDERS.md`).
 - Verify fees/bonds and escrow balances via public mempool APIs.
 - Index contributions and enforce claim-abuse / funding-window rules in KV + cron.
 
 **What the platform does not do**
 
 - Hold production multisig keys or auto-spend escrow (Workers never sign releases). The Worker may construct **unsigned** PSBTs for keyholder review.
-- Replace git as the canonical proposal record.
+- Guarantee listings cannot be taken down. The site chooses what to list; GitHub can take down the rules repo.
 - Confiscate unclaimed refunds or take a fee on refunds. Bounty structured-funding refunds use a single descriptor pool address (Q17 replaced for bounty). Direct stays per-donor.
 
 **Residual trust (v1):** 3-of-5 keyholders can stall after reviewer approval. Bounty structured branches include an `nLockTime` pool-refund path; the monthly / direct path has no on-chain forced spend. Stall clock starts at `disburse_ready` (monthly) or `branch_ready` (bounty). Publicity uses seat numbers. Ops runbook + site stall banner (`/escrow/stall`). Documented in PARAMETERS (Q21) and `docs/dispute-resolution.md`.
@@ -41,10 +42,10 @@ Three git repos (no monorepo):
 |------|------|------|
 | `workers/` | [Plebly/workers](https://github.com/Plebly/workers) | Cloudflare Worker API + cron |
 | `plebly.fund/` | [Plebly/plebly.fund](https://github.com/Plebly/plebly.fund) | Static SPA (Vite → GitHub Pages) |
-| `proposals/` | [Plebly/proposals](https://github.com/Plebly/proposals) | Canonical proposals, schema, CI, parameters |
+| `proposals/` | [Plebly/proposals](https://github.com/Plebly/proposals) | Published parameters, keyholders, schemas; not the live listing record |
 | `docs/` | *(local / not a git root)* | Design + this document |
 
-Proposal markdown lives under `proposals/proposals/{unindexed,listed,claimed,completed,declined}/`.
+Proposal markdown may still exist under `proposals/proposals/{unindexed,listed,claimed,completed,declined}/` as a fallback; live listings are Worker catalog docs.
 
 ---
 
@@ -75,7 +76,7 @@ flowchart TB
 
 | Concern | Source of truth |
 |---------|-----------------|
-| Proposal text + status | Git on `main` in `Plebly/proposals` |
+| Proposal text + status | Worker catalog / proposal docs (GitHub walk is fallback) |
 | Balances / fee txs | Bitcoin chain via mempool.space |
 | Sessions, ledgers, pending claims, ballots | Worker KV |
 | Covers | R2 |
