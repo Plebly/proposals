@@ -2,7 +2,11 @@
   "schema_version": 1,
   "shared": {
     "submission_fee_sats": 10000,
-    "platform_fee_percent": 2.5,
+    "platform_fee_percent": 3,
+    "keyholder_fee_percent": 2,
+    "bdi_fee_percent": 1,
+    "reviewer_reserve_percent": 2,
+    "keyholder_cap_sats": 500000,
     "milestone_threshold_sats": 1000000,
     "claim_window_days": 90,
     "claim_extension_days": 30,
@@ -26,12 +30,18 @@
     "claim_checkpoint_grace_days": 7,
     "claim_abuse_escalation_threshold": 2,
     "max_site_claim_prs_per_day": 10,
-    "identity_relink_cooldown_days": 7
+    "identity_relink_cooldown_days": 7,
+    "claim_mode_default": "proposer_select",
+    "claim_window_days_presets": [3, 7, 14, 30, 90],
+    "claim_window_days_default": 7,
+    "claim_decision_grace_days": 3,
+    "max_claim_applications": 10,
+    "max_claim_collaborators": 5
   },
   "networks": {
     "signet": {
       "claim_floor_sats": 10000,
-      "submission_fee_address": "tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz",
+      "submission_fee_address": "tb1qehu65p8nw83kmg34ufdzelkjrk7ayslv6adqw2",
       "claim_floor_note": "Temporary lower floor for faucet-friendly signet testing; restore toward mainnet value before launch."
     },
     "mainnet": {
