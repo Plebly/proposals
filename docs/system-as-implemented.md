@@ -99,7 +99,7 @@ flowchart TB
 | R2 | `MEDIA` → `plebly-media` |
 | Cron | `* * * * *` |
 
-**Secrets / vars (not all in git):** `SESSION_SECRET`, `HOOK_SECRET`, GitHub OAuth + App, `X_CLIENT_ID` / `X_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `AI_REVIEW_MODEL`, `AI_REVIEW_PROMPT_VERSION`, `BOOTSTRAP_REVIEWERS`, `ALLOW_FORCE_OUTCOME` (mainnet force escape), mainnet `SUBMISSION_FEE_ADDRESS` / `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP`.
+**Secrets / vars (not all in git):** `SESSION_SECRET`, `HOOK_SECRET`, GitHub OAuth + App, `X_CLIENT_ID` / `X_CLIENT_SECRET`, `BTCDECODED_MCP_KEY` (deliverable AI Reviewer), `ANTHROPIC_API_KEY` (listing draft-assist), `AI_REVIEW_MODEL`, `AI_REVIEW_PROMPT_VERSION`, `BOOTSTRAP_REVIEWERS`, `ALLOW_FORCE_OUTCOME` (mainnet force escape), mainnet `SUBMISSION_FEE_ADDRESS` / `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP`.
 
 ### Escrow mode boundary (hard fail)
 
@@ -360,14 +360,13 @@ Routes: `/reviewers/decisions/*` (open/vote/tally/dissent + session `request-ext
 
 **Tally timing:** `tallyReviewDecision` / `tallyRemovalBallot` / ops-role tally reject early tallies unless `force: true` (hook). Cron `processExpiredGovernance` auto-tallies after `closes_at`.
 
-### AI first-pass (on deliverable submit)
+### AI Reviewer (on deliverable submit)
 
-- Prompt: `proposals/review-prompts/{AI_REVIEW_PROMPT_VERSION}.md` (default `v1`).
-- Model: `AI_REVIEW_MODEL` (default `claude-sonnet-4-20250514`) via Anthropic Messages API in-Worker (`ANTHROPIC_API_KEY`).
-- Inputs: `verification_method` / `acceptance_criteria` (frontmatter or `## Verification` / `## Acceptance criteria` body sections) + deliverable.
-- **pass** → status `in_review` + open reviewer decision ballot with AI attached (never releases funds alone).
-- **fail** → revert/stay `claimed`, PR notes failing criteria, **no** ballot.
-- **ambiguous** / API down → ballot with AI reasoning (`ai-unavailable` style fallback).
+- Official display seat **AI Reviewer**, attribution **Powered by BTCDecoded Intelligence**. Does not vote and never releases funds.
+- Intelligence MCP `analyze_submission` (`BTCDECODED_MCP_KEY`, developer-tier `bdi_` key). No Anthropic fallback on this path. Listing draft-assist (`POST /ai`) still uses Anthropic.
+- Inputs: `verification_method` / `acceptance_criteria` (frontmatter or `## Verification` / `## Acceptance criteria` body sections) + deliverable text. Public GitHub PR URLs may be passed as `github_pr`. Campaigns (`proposal_type=direct`) and out-of-competence tags skip the call (`bypass`).
+- Map: `met` → pass, `not_met` → fail, else ambiguous. No key / 5xx / timeout → `unavailable`. Cites become `reasoning`.
+- Fail is **advisory**. Bounty status goes `in_review` on deliverable submit even on fail. Humans only after a donor flag. Never releases funds.
 
 ### Dissent
 
@@ -560,7 +559,7 @@ SPA routes (`plebly.fund/src/router.ts`):
 | `/about` | Beliefs, how-it-works, **Reviewers** governance section, parameters, residual trust, get involved |
 | `/embed.js` | Static third-party widget (`public/embed.js`) — loads `GET /embed/:proposalId` and renders a funding bar linked to `/p/{id}` |
 
-Login: nav **Log in** menu offers **GitHub** and **Nostr** (NIP-07 extension → challenge-wrapped NIP-98). X OAuth remains on the API but is hidden in the SPA until secrets are set. Top nav: Projects · Start a project · About (+ auth). Deliverable submit shows **AI first-pass** card inline. Footer: Explore (Projects, Start, About, Stats, **Declined**, Reviewers) · Source · Follow. SEO shells + `llms.txt` / `humans.txt` / sitemap include discovery routes.
+Login: nav **Log in** menu offers **GitHub** and **Nostr** (NIP-07 extension → challenge-wrapped NIP-98). X OAuth remains on the API but is hidden in the SPA until secrets are set. Top nav: Projects · Start a project · About (+ auth). Deliverable submit shows an **AI Reviewer** card inline (**Powered by BTCDecoded Intelligence**). Footer: Explore (Projects, Start, About, Stats, **Declined**, Reviewers) · Source · Follow. SEO shells + `llms.txt` / `humans.txt` / sitemap include discovery routes.
 
 Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutations go through Workers → PRs. Nested frontmatter parsed in `src/frontmatter.ts` (SPA) and `workers/src/lib/yaml-fm.ts` (API).
 
@@ -623,7 +622,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Ops role vote gate | ≥10 completions and ≥5 active reviewers |
 | Removal / ops-role cooldown | 30 days |
 | Removal eligibility floor | ≥10,000 sats confirmed (12 months) |
-| AI prompt / model | `v1` / `claude-sonnet-4-20250514` (env-overridable; **live `ai_review: false`**) |
+| AI Reviewer | Intelligence MCP `analyze_submission` (`BTCDECODED_MCP_KEY`); draft-assist still Anthropic `POST /ai` |
 | Network | **signet** |
 | Escrow mode (live) | **`single-key-test`** (Sparrow `tb1qhj27…` shared fee/escrow) |
 | Parameter community votes | **Not live** (empty stub) |
@@ -691,7 +690,7 @@ Bounty path: [`bounty-psbt.md`](bounty-psbt.md).
 
 1. Builder pays bond → site opens claim PR → slot held in KV.
 2. Reviewer merges → cron sets `claimed_at` from `merged_at`.
-3. Checkpoint by day 45 (+grace); deliverable submit → AI first-pass → reviewer ballot (unless clear fail).
+3. Checkpoint by day 45 (+grace); deliverable submit → AI Reviewer (advisory) → `in_review`. Humans only after a donor flag.
 4. Optional: fulfiller requests **one** 30-day claim extension → reviewers approve → `claim_window_ends_at` moves (second request → 409).
 5. Hook outcome `completed` with `decision_id` of tallied `deliverable_confirm` / `second_review` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat + `platform_fee` advisory; keyholders cosign the on-chain release (incl. 3% platform output) out-of-band.
 

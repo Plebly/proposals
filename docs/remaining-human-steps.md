@@ -184,7 +184,8 @@ Role **votes** stay gated until ≥10 platform completions and ≥5 active revie
 | Dedicated signet fee receive | Split from smoke escrow (in git as `tb1qehu65…`) | Confirm live Worker `TEST_SUBMISSION_FEE_ADDRESS` + CI `vars.SUBMISSION_FEE_ADDRESS` |
 | Unique fee/bond receives (A1b) | Stops txid front-run on the public address | `FEE_RECEIVE_XPUB` or `FEE_ADDRESS_MAP` — `/health` `fee_address_mode=unique` |
 | Allocate-on-merge secrets | Auto escrow after list merge | `vars.PLEBLY_API_URL` set; still need `secrets.PLEBLY_HOOK_SECRET` (= Worker `HOOK_SECRET`) on Plebly/proposals |
-| `ANTHROPIC_API_KEY` | AI first-pass; else ambiguous | `npx wrangler secret put ANTHROPIC_API_KEY` |
+| `BTCDECODED_MCP_KEY` | Deliverable AI Reviewer (Intelligence MCP); else `unavailable` | `npx wrangler secret put BTCDECODED_MCP_KEY` (developer-tier `bdi_` key, not Intelligence `INTERNAL_MCP_KEY`) |
+| `ANTHROPIC_API_KEY` | Listing draft-assist (`POST /ai`); not the deliverable path | `npx wrangler secret put ANTHROPIC_API_KEY` |
 | X OAuth | X login | `X_CLIENT_ID` / `X_CLIENT_SECRET` |
 | Nostr event fanout | Optional ops broadcast | `NOSTR_OPS_NSEC` Worker secret |
 | Replace seed zero fee txids | Before mainnet | Real 10k payments on demo listings (CI allowlist is signet-only) |
