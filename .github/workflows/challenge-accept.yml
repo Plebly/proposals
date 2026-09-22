@@ -1,0 +1,25 @@
+name: Accept abandoned-claim challenge
+
+# Ops: forfeit bond + clear active claim via Worker hook.
+on:
+  workflow_dispatch:
+    inputs:
+      proposal_id:
+        description: "Proposal id (e.g. PLEBLY-2026-002)"
+        required: true
+        type: string
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Accept challenge
+        env:
+          PLEBLY_HOOK_SECRET: ${{ secrets.PLEBLY_HOOK_SECRET }}
+          PLEBLY_API_URL: ${{ vars.PLEBLY_API_URL }}
+          PROPOSAL_ID: ${{ inputs.proposal_id }}
+        run: node scripts/challenge-accept.mjs
