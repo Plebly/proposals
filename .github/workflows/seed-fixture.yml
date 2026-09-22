@@ -28,6 +28,16 @@ on:
         required: false
         type: string
         default: "first_bonded"
+      proposer_nostr:
+        description: "Optional proposer Nostr hex pubkey"
+        required: false
+        type: string
+        default: ""
+      proposer_id:
+        description: "Optional proposer identity id (e.g. nostr:<hex>)"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   seed:
@@ -46,4 +56,6 @@ jobs:
           SEED_TAGS: ${{ inputs.tags }}
           SEED_TARGET_SATS: ${{ inputs.target_sats }}
           SEED_CLAIM_MODE: ${{ inputs.claim_mode }}
+          SEED_PROPOSER_NOSTR: ${{ inputs.proposer_nostr }}
+          SEED_PROPOSER_ID: ${{ inputs.proposer_id }}
         run: node scripts/seed-fixture.mjs
