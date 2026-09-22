@@ -158,6 +158,7 @@ export function emitWorkersParametersTs(doc) {
   max_site_claim_prs_per_day: ${p.max_site_claim_prs_per_day},
   identity_relink_cooldown_days: ${p.identity_relink_cooldown_days},
   claim_mode_default: ${JSON.stringify(p.claim_mode_default || "proposer_select")},
+  grant_cap_sats: ${p.grant_cap_sats ?? 0},
   claim_window_days_presets: ${JSON.stringify(p.claim_window_days_presets || [3, 7, 14, 30, 90])},
   claim_window_days_default: ${p.claim_window_days_default ?? 7},
   claim_decision_grace_days: ${p.claim_decision_grace_days ?? 3},
@@ -204,6 +205,8 @@ export type NetworkParameters = {
   max_site_claim_prs_per_day: number;
   identity_relink_cooldown_days: number;
   claim_mode_default: string;
+  /** 0 uses one cycle of a termed direct, otherwise the claim floor. */
+  grant_cap_sats: number;
   claim_window_days_presets: number[];
   claim_window_days_default: number;
   claim_decision_grace_days: number;
@@ -282,6 +285,7 @@ export function renderParametersMarkdownTables(doc) {
 | Platform fee | ${s.platform_fee_percent}% platform + ${s.keyholder_fee_percent}% keyholders (${s.platform_fee_percent + s.keyholder_fee_percent}% of the monthly disbursed set; ${formatSats(s.keyholder_cap_sats)} cap per signing keyholder) |
 | BDI fee | ${s.bdi_fee_percent}% of disbursed set (Bitcoin District Initiative fiscal sponsorship) |
 | Reviewer reserve | ${s.reviewer_reserve_percent}% of frozen allocations (structured funding output) |
+| Endowment grant cap | ${s.grant_cap_sats ? formatSats(s.grant_cap_sats) : "one cycle, or the claim floor"} |
 | Milestone threshold | ${formatSats(s.milestone_threshold_sats)} |
 | Claim window | ${s.claim_window_days} days from claim acceptance |
 | Claim extension | One ${s.claim_extension_days}-day extension via reviewer supermajority |

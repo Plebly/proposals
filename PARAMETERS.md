@@ -16,6 +16,7 @@ Community parameter votes are not live. Any future ballot system is volume-gated
 | Platform fee | 3% platform + 2% keyholders (5% of the monthly disbursed set; 500,000 sats cap per signing keyholder) |
 | BDI fee | 1% of disbursed set (Bitcoin District Initiative fiscal sponsorship) |
 | Reviewer reserve | 2% of frozen allocations (structured funding output) |
+| Endowment grant cap | one cycle, or the claim floor |
 | Milestone threshold | 1,000,000 sats |
 | Claim window | 90 days from claim acceptance |
 | Claim extension | One 30-day extension via reviewer supermajority |
