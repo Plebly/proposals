@@ -1,0 +1,49 @@
+name: Seed fixture claim
+
+# Ops / Eng: upsert a Signet listing via Worker hook (HOOK_SECRET).
+# Uses repo secret PLEBLY_HOOK_SECRET (same as allocate-on-merge).
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "Listing id (e.g. PLEBLY-2026-004)"
+        required: true
+        type: string
+      title:
+        description: "Title (3–200 chars)"
+        required: true
+        type: string
+      tags:
+        description: "Comma tags (docs forces AI bypass)"
+        required: false
+        type: string
+        default: "docs"
+      target_sats:
+        description: "Target sats (optional)"
+        required: false
+        type: string
+        default: "10000"
+      claim_mode:
+        description: "Claim mode"
+        required: false
+        type: string
+        default: "first_bonded"
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Seed fixture
+        env:
+          PLEBLY_HOOK_SECRET: ${{ secrets.PLEBLY_HOOK_SECRET }}
+          PLEBLY_API_URL: ${{ vars.PLEBLY_API_URL }}
+          SEED_ID: ${{ inputs.id }}
+          SEED_TITLE: ${{ inputs.title }}
+          SEED_TAGS: ${{ inputs.tags }}
+          SEED_TARGET_SATS: ${{ inputs.target_sats }}
+          SEED_CLAIM_MODE: ${{ inputs.claim_mode }}
+        run: node scripts/seed-fixture.mjs
