@@ -1,0 +1,48 @@
+name: Claim contrib ops
+
+on:
+  workflow_dispatch:
+    inputs:
+      proposal_id:
+        required: true
+        type: string
+      user_id:
+        required: true
+        type: string
+        description: Session user id (e.g. nostr:hex…)
+      identity:
+        required: false
+        type: string
+        default: ""
+      txid:
+        required: false
+        type: string
+        default: ""
+      vout:
+        required: false
+        type: string
+        default: ""
+      swap_id:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  claim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Bind donor credit (ops)
+        env:
+          PLEBLY_HOOK_SECRET: ${{ secrets.PLEBLY_HOOK_SECRET }}
+          PLEBLY_API_URL: ${{ vars.PLEBLY_API_URL }}
+          PROPOSAL_ID: ${{ inputs.proposal_id }}
+          USER_ID: ${{ inputs.user_id }}
+          IDENTITY: ${{ inputs.identity }}
+          TXID: ${{ inputs.txid }}
+          VOUT: ${{ inputs.vout }}
+          SWAP_ID: ${{ inputs.swap_id }}
+        run: node scripts/claim-contrib-ops.mjs
