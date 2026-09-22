@@ -1,0 +1,24 @@
+name: Bootstrap reviewers
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_ids:
+        required: true
+        type: string
+        description: Comma-separated session ids (1–5; Signet may use one e.g. github:184555205)
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Seed bootstrap reviewers
+        env:
+          PLEBLY_HOOK_SECRET: ${{ secrets.PLEBLY_HOOK_SECRET }}
+          PLEBLY_API_URL: ${{ vars.PLEBLY_API_URL }}
+          USER_IDS: ${{ inputs.user_ids }}
+        run: node scripts/bootstrap-reviewers.mjs
