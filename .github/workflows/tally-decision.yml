@@ -1,0 +1,28 @@
+name: Tally review decision
+
+on:
+  workflow_dispatch:
+    inputs:
+      decision_id:
+        required: true
+        type: string
+      force:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  tally:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Tally decision
+        env:
+          PLEBLY_HOOK_SECRET: ${{ secrets.PLEBLY_HOOK_SECRET }}
+          PLEBLY_API_URL: ${{ vars.PLEBLY_API_URL }}
+          DECISION_ID: ${{ inputs.decision_id }}
+          FORCE: ${{ inputs.force }}
+        run: node scripts/tally-decision.mjs
