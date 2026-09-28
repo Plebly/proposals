@@ -133,19 +133,19 @@ Response includes `platform_fee` advisory (`platform_fee_sats`, `fulfiller_sats`
 
 ### A2b. Bounty structured PSBT (signet)
 
-Bounty only. Direct stays on the monthly drip / A2 table above. Worker constructs unsigned PSBTs and **never broadcasts**. This table is a **mainnet flip gate**. How the path works: [`bounty-psbt.md`](bounty-psbt.md).
+Bounty only. Direct stays on the monthly drip / A2 table above. Worker constructs unsigned PSBTs. A keyholder Broadcast click is the only send. This table is a **mainnet flip gate**. How the path works: [`bounty-psbt.md`](bounty-psbt.md).
 
 | Step | What you do | Notes |
 |------|-------------|--------|
 | Freeze | Allocate a bounty (no milestones = Type 1) | Locks `psbt_kind`, allocations, reserve % |
 | Fund | Confirmed donate UTXOs ≥ allocations + reserve + miner fee | `GET /proposals/:id/structured-funding` |
-| Structure | Broadcast the unsigned structured PSBT in Sparrow | Hook `POST /proposals/:id/structured-funding/confirm` `{txid}` |
+| Structure | Keyholders → Signing: Ledger or SeedSigner, then Broadcast | Settlement waits for one confirmation, then the Worker records structured funding. Hook `POST /proposals/:id/structured-funding/confirm` remains if the tx was already broadcast outside the Worker |
 | Refund path | Available immediately after confirm | `refund` / `timelock` / `reserve_refund` — no award required |
 | Award | Bonded builder with an **on-chain** payout | Adds `clean` + `disputed` |
 | Challenge | Proposer marks done; donors flag or wait | Selects `disputed` or `clean` |
-| Sign | Keyholders → Branches: hash-gate, upload partials | Threshold combines; **no Broadcast button** |
-| Broadcast | Download combined → Sparrow | Humans broadcast |
-| Settle | Propose txid; second KH confirms | Or hook `POST /proposals/:id/branches/:alloc/confirm` |
+| Sign | Keyholders → Signing: Ledger or SeedSigner on the published PSBTs | Each confirmation is stored. No PSBT file paste |
+| Broadcast | Click Broadcast after the signature threshold | Worker sends once. Mainnet waits for one confirmation before settlement. No second keyholder pastes a txid |
+| Settle | Same Broadcast click, after the transaction is seen | Hook `POST /proposals/:id/branches/:alloc/confirm` remains for a tx already broadcast outside the Worker |
 | Reserve | After every work output settles | Worker selects `reserve_refund` |
 
 Live check: `GET /proposals/:id/branches` shows `selected` + `signoff`. `GET /keyholders/branch-queue` is keyholder-only.
@@ -279,8 +279,8 @@ Confirm:
 |------|--------|
 | In-Worker descriptor → address derive | Deferred — Sparrow map |
 | Automated refund batching (**direct**) | Deferred — register + keyholder batch |
-| Bounty pool refund | Shipped — `refund` / `timelock` / `reserve_refund`; humans broadcast |
-| Multisig PSBT signing / bounty broadcast in Worker | **Never** — human cosign + Sparrow broadcast |
+| Bounty pool refund | Shipped — `refund` / `timelock` / `reserve_refund`; signed in the same sitting, then Broadcast |
+| Multisig PSBT signing / bounty broadcast in Worker | Keyholders sign on a device. The Worker broadcasts only when a keyholder clicks Broadcast |
 | Community parameter votes | Deferred — publish rules in `PARAMETERS.md` first |
 | Keyholder replacement process | Human / Q21 stall runbook only |
 
@@ -292,7 +292,7 @@ Confirm:
 1. Confirm dedicated fee receive is live (`tb1qehu65…` + CI var)  
 2. Set allocate-on-merge `secrets.PLEBLY_HOOK_SECRET` if not already  
 3. Faucet + exact fee/bond + fund escrow to claim floor  
-4. **A2b bounty PSBT rehearsal** — structure confirm → hash-gate → Sparrow broadcast → dual-ack settle (flip gate)  
+4. **A2b bounty PSBT rehearsal** — one Ledger sitting, one SeedSigner sitting, then manual Broadcast (flip gate)  
 5. **Bootstrap five reviewers** (blocker for any human quorum)  
 6. Optional: Anthropic / X / Nostr; exercise extension + listing challenge + removal  
 7. Remember: no monthly `completed` release until multisig mode. A2b does **not** need that gate.  
@@ -301,7 +301,7 @@ Confirm:
 1. **KEYHOLDERS** + Sparrow maps (primary + reviewer escrow); remove `TEST_ESCROW_ADDRESS`  
 2. Mainnet fee in PARAMETERS + secrets/vars  
 3. `flip-to-mainnet.sh` + `smoke:mainnet` (`escrow_mode=multisig`)  
-4. First allocate + LN smoke (direct) + first bounty Sparrow broadcast + first monthly cosigned `completed`  
+4. First allocate + LN smoke (direct) + first bounty Broadcast + first monthly cosigned `completed`  
 
 ---
 
