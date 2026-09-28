@@ -5,10 +5,10 @@
 #   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:a github:b github:c github:d github:e
 # A later run may add seats up to five if it includes every id already seated.
 # Optional:
-#   API=https://plebly-api.securesovereigns.workers.dev
+#   API=https://api.plebly.fund
 set -euo pipefail
 
-API="${API:-https://plebly-api.securesovereigns.workers.dev}"
+API="${API:-https://api.plebly.fund}"
 API="${API%/}"
 
 if [[ -z "${HOOK_SECRET:-}" ]]; then

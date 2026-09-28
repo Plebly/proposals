@@ -21,7 +21,7 @@ Install the **Plebly** GitHub App on any repository to turn an issue into a Pleb
 | `vars.PLEBLY_BRIDGE_WEBHOOK=1` on `Plebly/proposals` | Disables the same-repo Action so only the Worker drafts | Set |
 | Labels `plebly` / `plebly-proposal` on `Plebly/proposals` | Same-repo triggers | Created |
 
-Webhook URL (paste into App settings): `https://plebly-api.securesovereigns.workers.dev/github/webhook`
+Webhook URL (paste into App settings): `https://api.plebly.fund/github/webhook`
 
 Events: `installation`, `installation_repositories`, `issues`, `issue_comment`.
 

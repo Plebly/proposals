@@ -6,10 +6,10 @@
 #     github:alice AABBCCDD tpub... \
 #     github:bob 11223344 tpub...
 # Optional:
-#   API=https://plebly-api.securesovereigns.workers.dev
+#   API=https://api.plebly.fund
 set -euo pipefail
 
-API="${API:-https://plebly-api.securesovereigns.workers.dev}"
+API="${API:-https://api.plebly.fund}"
 API="${API%/}"
 
 if [[ -z "${HOOK_SECRET:-}" ]]; then

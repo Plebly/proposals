@@ -76,7 +76,7 @@ Needs **exactly five** Plebly user ids (`github:{login}`, `x:{id}`, etc. — sam
 ```bash
 # From proposals/
 export HOOK_SECRET='…'   # from `cd workers && npx wrangler secret put HOOK_SECRET` value — never commit
-export API='https://plebly-api.securesovereigns.workers.dev'
+export API='https://api.plebly.fund'
 ./scripts/bootstrap-reviewers.sh \
   'github:alice' 'github:bob' 'github:carol' 'github:dave' 'github:erin'
 ```

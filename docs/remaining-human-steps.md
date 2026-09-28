@@ -39,12 +39,12 @@ Launch blockers stay in this checklist. Product expansion beyond governance is i
 Live check:
 
 ```bash
-curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq '{ok,network,escrow_mode,escrow_ready,escrow_descriptor_set,escrow_test_address_set,lightning_enabled,fee_address_mode,ai_review,x_oauth,mainnet_secrets_present}'
+curl -sS https://api.plebly.fund/health | jq '{ok,network,escrow_mode,escrow_ready,escrow_descriptor_set,escrow_test_address_set,lightning_enabled,fee_address_mode,ai_review,x_oauth,mainnet_secrets_present}'
 # expect today: ok=true, network=signet, escrow_mode=single-key-test,
 #               escrow_ready=true, escrow_test_address_set=true, lightning_enabled=false,
 #               fee_address_mode=shared until A1b, ai_review=false, x_oauth=false,
 #               mainnet_secrets_present=false
-curl -sS https://plebly-api.securesovereigns.workers.dev/reviewers | jq .count
+curl -sS https://api.plebly.fund/reviewers | jq .count
 # expect: 0 until you bootstrap
 ```
 
@@ -71,7 +71,7 @@ Listed demos and Worker `TEST_*` already use **your** Sparrow signet receives (s
 4. Deploy and confirm mode:
    ```bash
    cd workers && npx wrangler deploy
-   curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq .
+   curl -sS https://api.plebly.fund/health | jq .
    # expect escrow_mode=single-key-test, escrow_ready=true, lightning_enabled=false,
    #        escrow_config_error=null, escrow_descriptor_set=false
    ```
@@ -95,7 +95,7 @@ Do this **before** a new 10k fee/bond. If a shared-address payment is already si
    `FEE_ADDRESS_MAP='{"0":"tb1…","1":"tb1…"}'`
 3. Confirm the toggle flipped:
    ```bash
-   curl -sS https://plebly-api.securesovereigns.workers.dev/health | jq .fee_address_mode
+   curl -sS https://api.plebly.fund/health | jq .fee_address_mode
    # expect: "unique"
    ```
 4. After this, pay **only** the address shown while signed in. New payments to the published shared address do not count.
@@ -159,7 +159,7 @@ Live roster is empty until you seed (`GET /reviewers` → `count: 0`). Seats are
    ```bash
    cd proposals
    export HOOK_SECRET='…'   # never commit
-   export API='https://plebly-api.securesovereigns.workers.dev'
+   export API='https://api.plebly.fund'
    ./scripts/bootstrap-reviewers.sh \
      'github:…' 'github:…' 'github:…' 'github:…' 'github:…'
    ```

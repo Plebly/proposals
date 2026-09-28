@@ -4,7 +4,7 @@
 **Date:** 2026-07-27  
 **Network (deployed):** Bitcoin **signet**  
 **Escrow mode (live):** `single-key-test` (`/health.escrow_mode`)  
-**API:** https://plebly-api.securesovereigns.workers.dev (Workers `main` @ `a50b4c8`)  
+**API:** https://api.plebly.fund (Workers `main` @ `a50b4c8`)  
 **Site:** https://plebly.fund (SPA `main` @ `e9c6168`)  
 **Proposals `main` tip:** Sparrow signet escrows ([PR #6](https://github.com/Plebly/proposals/pull/6)); soft-launch protocol pack landed ([PR #7](https://github.com/Plebly/proposals/pull/7))
 
