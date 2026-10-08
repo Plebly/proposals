@@ -478,7 +478,7 @@ Implemented in `workers/src/lib/fee-payment.ts`.
 
 Purposes: `submission_fee` | `claim_bond` (cross-purpose: one txid cannot pay both).
 
-CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_ADDRESS` is set (warns + skips if unset). Signet all-zero `submission_fee_txid` is allowed **only** for seed demos (`demo-signet-smoke.md`, `knots-size-value-spam.md`); new listings need a real 10k payment. Mainnet rejects zeros. Live CI fee var points at `tb1qhj27…`. **Ops:** keep the var set and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
+CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_ADDRESS` is set (warns + skips if unset). Signet all-zero `submission_fee_txid` is allowed **only** for seed demos (`PLEBLY-SIGNET-DEMO.md`, `PLEBLY-KNOTS-SIZE-VALUE-SPAM.md`); new listings need a real 10k payment. Mainnet rejects zeros. Live CI fee var points at `tb1qhj27…`. **Ops:** keep the var set and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
 
 ---
 

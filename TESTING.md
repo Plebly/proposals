@@ -51,7 +51,7 @@ Check: `curl https://plebly-api.securesovereigns.workers.dev/health`
 
 ## 4. List a test bounty
 
-Option A — **fast path:** merge the demo proposal in `proposals/listed/demo-signet-smoke.md` (update `escrow_address` to yours).
+Option A — **fast path:** merge the demo proposal in `proposals/listed/PLEBLY-SIGNET-DEMO.md` (update `escrow_address` to yours).
 
 Option B — **full path:**
 
