@@ -58,8 +58,10 @@ for (const file of files) {
   const parsed = matter(raw);
   if (parsed.data.id && String(parsed.data.id).trim()) continue;
   const id = `PLEBLY-${year}-${String(next).padStart(3, "0")}`;
-  parsed.data.id = id;
-  const out = matter.stringify(parsed.content.replace(/^\n/, ""), parsed.data);
+  // Never mutate parsed.data: gray-matter caches parses by file content, so a
+  // later byte-identical file would see this id and be skipped.
+  const data = { ...parsed.data, id };
+  const out = matter.stringify(parsed.content.replace(/^\n/, ""), data);
   fs.writeFileSync(file, out.endsWith("\n") ? out : `${out}\n`);
   console.log(`${file}: assigned ${id}`);
   next += 1;
