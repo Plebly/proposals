@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * Assign PLEBLY-YYYY-NNN ids to proposal files that lack frontmatter `id`.
- * Bumps SEQUENCE.md. Safe to re-run (skips files that already have id).
+ * Assign PLEBLY-YYYY-NNN ids to proposal files that lack frontmatter `id`,
+ * and rename each file to `<id>.md` (validate-proposal requires the filename
+ * stem to equal the id — see filename-id.mjs). Bumps SEQUENCE.md. Safe to
+ * re-run (skips files that already have id). Refuses (exit 1, counter not
+ * consumed) when `<id>.md` already exists in the same directory.
  *
  * Usage: node scripts/assign-sequence.mjs [files...]
  *        node scripts/assign-sequence.mjs --all
@@ -61,10 +64,21 @@ for (const file of files) {
   const parsed = matter(raw, {});
   if (parsed.data.id && String(parsed.data.id).trim()) continue;
   const id = `PLEBLY-${year}-${String(next).padStart(3, "0")}`;
+  const target = path.join(path.dirname(file), `${id}.md`);
+  if (target !== file && fs.existsSync(target)) {
+    console.error(`${file}: not assigned ${id}: ${target} already exists`);
+    process.exitCode = 1;
+    continue;
+  }
   parsed.data.id = id;
   const out = matter.stringify(parsed.content.replace(/^\n/, ""), parsed.data);
-  fs.writeFileSync(file, out.endsWith("\n") ? out : `${out}\n`);
-  console.log(`${file}: assigned ${id}`);
+  if (target !== file) fs.renameSync(file, target);
+  fs.writeFileSync(target, out.endsWith("\n") ? out : `${out}\n`);
+  console.log(
+    target === file
+      ? `${file}: assigned ${id}`
+      : `${file}: assigned ${id} → renamed to ${path.basename(target)}`,
+  );
   next += 1;
   assigned += 1;
 }
