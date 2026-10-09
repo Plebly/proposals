@@ -17,6 +17,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Unit tests
+        run: npm test
       - name: Parameters sync check
         run: npm run parameters:check
       - name: Validate proposals

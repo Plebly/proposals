@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Seed 3–5 bootstrap reviewer seats via the Worker hook.
+# Seed 1–5 bootstrap reviewer seats via the Worker hook.
+# Mainnet / default Worker enforces 3–5; Signet allows 1–5 (single-human bootstrap).
 # Usage:
 #   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:a github:b github:c
 #   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:a github:b github:c github:d github:e
+#   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:184555205   # Signet one-human
 # A later run may add seats up to five if it includes every id already seated.
 # Optional:
 #   API=https://api.plebly.fund
@@ -16,9 +18,10 @@ if [[ -z "${HOOK_SECRET:-}" ]]; then
   exit 1
 fi
 
-if [[ "$#" -lt 3 || "$#" -gt 5 ]]; then
-  echo "bootstrap requires 3–5 user ids (got $#)." >&2
+if [[ "$#" -lt 1 || "$#" -gt 5 ]]; then
+  echo "bootstrap requires 1–5 user ids (got $#)." >&2
   echo "example: $0 github:alice github:bob github:carol" >&2
+  echo "Signet may use a single id: $0 github:184555205" >&2
   exit 1
 fi
 
@@ -45,4 +48,4 @@ fi
 echo "Verify: curl -sS $API/reviewers | python3 -m json.tool"
 curl -sS "$API/reviewers" | python3 -m json.tool
 echo
-echo "Next: mirror the identities into REVIEWERS.md and open a PR."
+echo "Next: mirror seated identities into REVIEWERS.md and open a PR."

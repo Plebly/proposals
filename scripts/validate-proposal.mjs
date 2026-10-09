@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { filenameIdErrors } from "./filename-id.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -88,6 +89,9 @@ function validateFile(filePath) {
   ) {
     errors.push("milestones: required when target_sats >= 1000000");
   }
+  errors.push(
+    ...filenameIdErrors(path.relative(root, path.resolve(filePath)), proposal.id),
+  );
   return { ok: errors.length === 0, errors, proposal };
 }
 

@@ -30,8 +30,8 @@ const mainnet = (process.env.BITCOIN_NETWORK || "signet") === "mainnet";
 
 /** Basename allowlist for historical seed demos (signet only). */
 const ZERO_TXID_ALLOWLIST = new Set([
-  "demo-signet-smoke.md",
-  "knots-size-value-spam.md",
+  "PLEBLY-SIGNET-DEMO.md",
+  "PLEBLY-KNOTS-SIZE-VALUE-SPAM.md",
 ]);
 
 function allowsZeroFeeTxid(file) {

@@ -1,0 +1,38 @@
+name: Open review decision
+
+on:
+  workflow_dispatch:
+    inputs:
+      proposal_id:
+        required: true
+        type: string
+      proposal_path:
+        required: false
+        type: string
+        default: ""
+      kind:
+        required: false
+        type: string
+        default: "deliverable_confirm"
+      ai_outcome:
+        required: false
+        type: string
+        default: "bypass"
+
+jobs:
+  open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Open decision
+        env:
+          PLEBLY_HOOK_SECRET: ${{ secrets.PLEBLY_HOOK_SECRET }}
+          PLEBLY_API_URL: ${{ vars.PLEBLY_API_URL }}
+          PROPOSAL_ID: ${{ inputs.proposal_id }}
+          PROPOSAL_PATH: ${{ inputs.proposal_path }}
+          KIND: ${{ inputs.kind }}
+          AI_OUTCOME: ${{ inputs.ai_outcome }}
+        run: node scripts/open-decision.mjs
