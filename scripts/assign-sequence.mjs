@@ -58,7 +58,10 @@ let assigned = 0;
 for (const file of files) {
   if (!fs.existsSync(file)) continue;
   const raw = fs.readFileSync(file, "utf8");
-  const parsed = matter(raw);
+  // Pass options so gray-matter skips its content-keyed cache: its cached
+  // result shares `data`, and the `parsed.data.id = id` below would make a
+  // later byte-identical file look already assigned.
+  const parsed = matter(raw, {});
   if (parsed.data.id && String(parsed.data.id).trim()) continue;
   const id = `PLEBLY-${year}-${String(next).padStart(3, "0")}`;
   const target = path.join(path.dirname(file), `${id}.md`);
