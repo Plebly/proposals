@@ -66,7 +66,7 @@ See `plebly.fund/docs/claim-abuse-mitigations.md` (risk register). Changes requi
 | Max site claim PRs per day | 10 (Worker global) |
 | Identity relink cooldown | 7 days |
 | Default claim mode | `proposer_select` (`first_bonded` \| `proposer_select`) |
-| Claim application window presets | 3 / 7 / 14 days (`proposer_select`) |
+| Claim application window presets | 3 / 7 / 14 / 30 / 90 days (`proposer_select`) |
 | Default application window | 7 days |
 | Claim decision grace | 3 days (then auto-award earliest bonded) |
 | Max claim applications | 10 per proposal |
