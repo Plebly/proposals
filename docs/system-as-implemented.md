@@ -228,7 +228,7 @@ Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed 
 
 `POST /claims/outcome` with `outcome: "completed"` (authorize keyholder disbursement after review) calls `assertMultisigForRelease`. In `single-key-test` it returns **403** `multisig_required_for_release`. On multisig, non-forced completion requires a tallied approve on `deliverable_confirm` or `second_review` — preferably via explicit `decision_id` (`resolveReleaseDecision`). `claim_extension` / `listing_challenge` approves **cannot** authorize release.
 
-`force: true` skips the decision gate and writes an immutable `forceoutcome:{id}` audit row (+ index). It always requires `force_note` (≥8 chars). On mainnet it also requires Worker var `ALLOW_FORCE_OUTCOME=true` (signet still allows force with a note). Successful `completed` responses include a `platform_fee` advisory (`percent: 2.5`, `platform_fee_sats`, `fulfiller_sats`, ops address) — Worker never signs. Rejected outcomes are unchanged. Workers may construct unsigned PSBTs and gate the ops completion path.
+`force: true` skips the decision gate and writes an immutable `forceoutcome:{id}` audit row (+ index). It always requires `force_note` (≥8 chars). On mainnet it also requires Worker var `ALLOW_FORCE_OUTCOME=true` (signet still allows force with a note). Successful `completed` responses include a `platform_fee` advisory (`percent` is the 5% total: 3% platform + 2% keyholders, plus `platform_fee_sats`, `fulfiller_sats`, ops address) — Worker never signs. Rejected outcomes are unchanged. Workers may construct unsigned PSBTs and gate the ops completion path.
 
 ---
 
@@ -498,7 +498,7 @@ Implemented in `workers/src/lib/fee-payment.ts`.
 
 Purposes: `submission_fee` | `claim_bond` (cross-purpose: one txid cannot pay both).
 
-CI: `proposals/scripts/check-fee-payments.mjs` on PRs that touch proposal markdown — **fails** if `vars.SUBMISSION_FEE_ADDRESS` is unset. Signet all-zero `submission_fee_txid` is allowed **only** for seed demos (`PLEBLY-SIGNET-DEMO.md`, `PLEBLY-KNOTS-SIZE-VALUE-SPAM.md`); new listings need a real 10k payment. Mainnet rejects zeros. Live CI fee var points at `tb1qhj27…`. **Ops:** keep the var set and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
+CI: `proposals/scripts/check-fee-payments.mjs` on PRs that touch proposal markdown — **fails** if `vars.SUBMISSION_FEE_ADDRESS` is unset. Signet all-zero `submission_fee_txid` is allowed **only** for seed demos (`PLEBLY-SIGNET-DEMO.md`, `PLEBLY-KNOTS-SIZE-VALUE-SPAM.md`); new listings need a real 10k payment. Mainnet rejects zeros. Live CI fee var is `tb1qehu65p8nw83kmg34ufdzelkjrk7ayslv6adqw2` (the dedicated fee receive). The smoke escrow allowlist stays `tb1qhj27…`. **Ops:** keep the var set and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
 
 ---
 
@@ -650,7 +650,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → **`processClaimA
 | Removal eligibility floor | ≥10,000 sats confirmed (12 months) |
 | AI Reviewer | Intelligence MCP `analyze_submission` (`BTCDECODED_MCP_KEY`); draft-assist still Anthropic `POST /ai` |
 | Network | **signet** |
-| Escrow mode (live) | **`single-key-test`** (Sparrow `tb1qhj27…` shared fee/escrow) |
+| Escrow mode (live) | **`multisig`** (`/health`). Fee receive is `tb1qehu65…` and `fee_address_mode` is still `shared`. Smoke escrow allowlist remains `tb1qhj27…`. |
 | Parameter community votes | **Not live** (empty stub) |
 
 ---

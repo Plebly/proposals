@@ -280,7 +280,7 @@ Confirm:
 | In-Worker descriptor → address derive | Deferred — Sparrow map |
 | Automated refund batching (**direct**) | Deferred — register + keyholder batch |
 | Bounty pool refund | Shipped — `refund` / `timelock` / `reserve_refund`; signed in the same sitting, then Broadcast |
-| Multisig PSBT signing / bounty broadcast in Worker | Keyholders sign on a device. The Worker broadcasts only when a keyholder clicks Broadcast |
+| Multisig PSBT signing / bounty broadcast in Worker | Keyholders sign on a device. Bounty branch PSBTs are combined by the Worker and broadcast in Sparrow; the Worker never broadcasts those. Monthly and direct disburse broadcasts only when a keyholder clicks Broadcast |
 | Community parameter votes | Deferred — publish rules in `PARAMETERS.md` first |
 | Keyholder replacement process | Human / Q21 stall runbook only |
 
