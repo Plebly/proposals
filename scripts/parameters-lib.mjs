@@ -255,6 +255,12 @@ export const CLAIM_ABUSE_ESCALATION_THRESHOLD = ${p.claim_abuse_escalation_thres
 export const CORE_ANNUAL_GAP_SATS = ${p.core_annual_gap_sats};
 export const MAX_SITE_CLAIM_PRS_PER_DAY = ${p.max_site_claim_prs_per_day};
 export const IDENTITY_RELINK_COOLDOWN_DAYS = ${p.identity_relink_cooldown_days};
+export const CLAIM_MODE_DEFAULT = ${JSON.stringify(p.claim_mode_default)} as const;
+export const CLAIM_WINDOW_DAYS_PRESETS = ${JSON.stringify(p.claim_window_days_presets)} as const;
+export const CLAIM_WINDOW_DAYS_DEFAULT = ${p.claim_window_days_default};
+export const CLAIM_DECISION_GRACE_DAYS = ${p.claim_decision_grace_days};
+export const MAX_CLAIM_APPLICATIONS = ${p.max_claim_applications};
+export const MAX_CLAIM_COLLABORATORS = ${p.max_claim_collaborators};
 export const CLAIM_WINDOW_DAYS = ${p.claim_window_days};
 export const CLAIM_EXTENSION_DAYS = ${p.claim_extension_days};
 export const FUNDING_WINDOW_DAYS = ${p.funding_window_days};
@@ -334,5 +340,11 @@ See \`plebly.fund/docs/claim-abuse-mitigations.md\` (risk register). Changes req
 | Claim abuse escalation threshold | ${s.claim_abuse_escalation_threshold} (expired/abandoned without completion → 2× bond) |
 | Max site claim PRs per day | ${s.max_site_claim_prs_per_day} (Worker global) |
 | Identity relink cooldown | ${s.identity_relink_cooldown_days} days |
+| Default claim mode | \`${s.claim_mode_default}\` (\`first_bonded\` \\| \`proposer_select\`) |
+| Claim application window presets | ${(s.claim_window_days_presets || []).join(" / ")} days (\`proposer_select\`) |
+| Default application window | ${s.claim_window_days_default} days |
+| Claim decision grace | ${s.claim_decision_grace_days} days (then auto-award earliest bonded) |
+| Max claim applications | ${s.max_claim_applications} per proposal |
+| Max claim collaborators | ${s.max_claim_collaborators} (credit-only) |
 `;
 }

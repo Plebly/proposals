@@ -163,7 +163,7 @@ Installation token opens PRs into `Plebly/proposals` (propose, **amend**, claim,
 
 `pr_open` → `unindexed` → `listed` | `declined` | `declined_fundable` → `funding` / `claimable` → `claimed` (bounty) → `in_review` → `completed` | `rejected`  
 
-Also: `underfunded`, `abandoned_vote`, `refunding`, `redirected`.
+Also: `underfunded`, `abandoned_vote`, `refunding`, `redirect_pending` (ops/KH manual escrow move; legacy alias `redirected`).
 
 ### Folders (on disk)
 
@@ -281,19 +281,39 @@ Entry shape (conceptual):
 
 ### Product rules (enforced)
 
-1. **Site slot** = pending KV + `registerActiveClaim` / `claimactive:` when claim PR opens (not at merge).
+1. **Award, not PR race (Q9):** exclusivity starts when a **bonded applicant is awarded** (`first_bonded`, proposer accept, or auto earliest bonded). The claim PR opens at award; the site slot is pending KV + `registerActiveClaim` / `claimactive:` then (not at merge).
 2. **90-day window** starts when `claimed_at` is set from claim PR **`merged_at`** only (cron `syncClaimAcceptedAt`).
-3. Bond/fee **spent at verify** (`paytxid:`) — burned even if PR never merges.
+3. Bond/fee **spent at verify** (`paytxid:`) — burned even if PR never merges. Losing applicants’ bonds are indexed refundable.
 
-### Open claim (`POST /claims/`)
+### Claim modes (propose-time, frozen)
 
-1. Session; not suspended; max **1** active claim; reclaim cooldown; global **10** site claims/day.
-2. Exact bond (10k or 2× after abuse threshold) to fee address.
-3. Confirmed escrow ≥ claim floor; status open.
-4. Milestones grace: if balance ≥ 1M, empty milestones, and `milestones_due_at` passed → reject.
-5. CAS pending `claim:{id}` (TTL **72h**).
-6. Mark bond spent; open PR → `status: claimed`, `claim_opened_at`, `claimed_at: null`, path toward `proposals/claimed/`.
-7. Set `claimactive:{id}`, `claimowner:{id}`, ledger bond `locked`.
+| Mode | Behavior |
+|------|----------|
+| `proposer_select` (default) | Collect bonded apps for `claim_window_days` ∈ {3,7,14}. Window clock starts when escrow ≥ claim floor (`claimable`), not at propose. Proposer may Accept anytime. After window + `claim_decision_grace_days` (3) with no pick → auto-award earliest bonded. Zero bonded → reopen claimable. |
+| `first_bonded` | First applicant whose bond verifies is awarded immediately. |
+
+Frontmatter: `claim_mode`, `claim_window_days` (bounty only). Caps: **10** open apps/proposal; **1** open app/identity globally; **1** awarded active claim/identity. Apply as individual or GitHub org. **Org apply:** Account → Link GitHub orgs (`read:org` once; store admin attestations on `profile.github_orgs`, 90-day TTL; no stored OAuth token). Apply modal only offers linked orgs. Org awards auto-invite public members as credit-only collaborators (max 5). Credit collaborators never earn completion / reviewer seats.
+
+### Bonded applications (`claim-applications.ts`)
+
+| Step | API / cron |
+|------|------------|
+| List (public bond status) | `GET /claims/applications?proposal_path=` |
+| Apply with bond | `POST /claims/` or `POST /claims/applications` (bond verified sync at apply — v1 has no async `pending_bond` confirm path) |
+| Proposer accept / reject | `POST /claims/applications/:id/accept\|reject` (proposer identity only) |
+| Withdraw | `POST /claims/applications/:id/withdraw` |
+| Collaborators | `POST /claims/collaborators`, `/collaborators/accept`; GitHub search/following helpers |
+| Timers | Cron `processClaimApplicationTimers` — grace notify + auto-award; floor sync calls `startClaimWindowIfNeeded` |
+
+KV: `claimapp:{proposalId}`, `claimappuser:{userId}`, `claimapp:openindex`.
+
+### Award → claim PR
+
+1. Session gates + bond verify + floor; CAS pending `claim:{id}` (TTL **72h**).
+2. Mark bond spent; open PR → `status: claimed`, `claimer` / `claimer_type` / `claim_agent`, `claim_award_reason`, `claim_opened_at`, `claimed_at: null`, `claim_collaborators`, path toward `proposals/claimed/`.
+3. Set `claimactive:{id}`, `claimowner:{id}` (agent session for org), ledger bond `locked`; losers → `refunded` + notify.
+
+Legacy `createBuilderClaim` remains in tree for older tests; site routes use the application pool.
 
 ### Checkpoint
 
@@ -478,7 +498,7 @@ Implemented in `workers/src/lib/fee-payment.ts`.
 
 Purposes: `submission_fee` | `claim_bond` (cross-purpose: one txid cannot pay both).
 
-CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_ADDRESS` is set (warns + skips if unset). Signet all-zero `submission_fee_txid` is allowed **only** for seed demos (`PLEBLY-SIGNET-DEMO.md`, `PLEBLY-KNOTS-SIZE-VALUE-SPAM.md`); new listings need a real 10k payment. Mainnet rejects zeros. Live CI fee var points at `tb1qhj27…`. **Ops:** keep the var set and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
+CI: `proposals/scripts/check-fee-payments.mjs` on PRs that touch proposal markdown — **fails** if `vars.SUBMISSION_FEE_ADDRESS` is unset. Signet all-zero `submission_fee_txid` is allowed **only** for seed demos (`PLEBLY-SIGNET-DEMO.md`, `PLEBLY-KNOTS-SIZE-VALUE-SPAM.md`); new listings need a real 10k payment. Mainnet rejects zeros. Live CI fee var points at `tb1qhj27…`. **Ops:** keep the var set and require status check **`validate`** on `main` (see `docs/mainnet-launch-ops.md`).
 
 ---
 
@@ -487,7 +507,8 @@ CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_
 ### Funding window (Q5)
 
 - Frontmatter: `escrow_allocated_at`, `funding_window_ends_at` (180d).
-- Cron: window ended and balance &lt; floor → PR status `underfunded`.
+- Cron: window ended and balance &lt; floor → PR status `underfunded`; if escrow balance &gt; 0 also open an **underfunded** contributor ballot (Q18). Empty escrow → underfunded with no ballot.
+- Enter `refunding` only when ballot winner is `refund` (not auto on window end).
 - UI: days-remaining banner on project page.
 - Contributor ballot winner `extend` → one-shot +90d (`grantFundingExtension` / `fundext:`) and PR-patch restore to `listed`.
 
@@ -507,7 +528,8 @@ CI: `proposals/scripts/check-fee-payments.mjs` on PRs when `vars.SUBMISSION_FEE_
 - Idle **365d** claimable → open ballot + status `abandoned_vote`.
 - Options: `extend` | `refund` | `redirect:<proposal_id>` (≤3 noms).
 - Voting: one identity-linked contributor with **≥3 confs** = one vote.
-- Tally (hook): plurality; quorum = majority of distinct contributors (or all if &lt;3).
+- Tally (hook **or cron** after `closes_at`): plurality; quorum = majority of distinct contributors (or all if &lt;3).
+- Winner `refund` → status `refunding` + contrib refund package; winner `redirect:*` → `redirect_pending` + `redirect_to` (ops/KH manual; no auto escrow move).
 - Decision artifact PR under `decisions/`.
 
 ### Refunds (Q17)
@@ -555,7 +577,8 @@ SPA routes (`plebly.fund/src/router.ts`):
 | `/declined` | Archive of `declined` / `declined_fundable` listings |
 | `/reviewers` | Governance: jump nav; active roster; open decisions; removal ballots (+ evidence/result PR links); open-a-removal form; **operational roles** (seats / ballots / nominate when gated open) — footer + About |
 | `/u/:username` | Public profile (+ reviewer badge when seated) |
-| `/account` | Profile (bio, skills tags, links, payout, funder appearance), watching, claims (+ history), proposals; reviewer / funder links |
+| `/account` | Profile (bio, skills tags, links, payout, funder appearance), watching, claims (+ history), **Funds** (bonds + contribution refunds), proposals; reviewer / funder links; keyholder card when invited/active |
+| `/keyholders` | Keyholder console (roster, disburse queue, PSBT coord, dual-ack settle) — gated to invited/active seats |
 | `/about` | Beliefs, how-it-works, **Reviewers** governance section, parameters, residual trust, get involved |
 | `/embed.js` | Static third-party widget (`public/embed.js`) — loads `GET /embed/:proposalId` and renders a funding bar linked to `/p/{id}` |
 
@@ -572,16 +595,16 @@ Proposals are **read from GitHub `main`**; create/amend/claim/lifecycle mutation
 | Auth | Routes |
 |------|--------|
 | Public | `/health`, **`GET /embed/:proposalId`** (third-party CORS `*`, confirmed escrow balance + funding %), proposal claim status, contrib list, LN status/swap poll, ballot get, stall get, media get, public profile, reviewer roster / open decisions / open removals / decision get, **`GET /ops/roles`**, `GET /ops/param-proposals` |
-| Session | **propose submit + amend**, claim, checkpoint, challenge open, rebuttal, watch, profile CRUD, contrib claim, ballot vote, refund register, media upload, deliverable, reviewer vote/dissent, removal open/vote, **claim extension request**, **listing challenge open**, **ops role nominate/vote** |
+| Session | **propose submit + amend**, claim **apply / accept / reject / withdraw**, collaborators, checkpoint, challenge open, rebuttal, watch, profile CRUD, contrib claim, ballot vote, refund register, media upload, deliverable, reviewer vote/dissent, removal open/vote, **claim extension request**, **listing challenge open**, **ops role nominate/vote** |
 | HOOK_SECRET | allocate, stall, outcome, challenge accept, refundable bonds, ballot open/tally, refunds list, reviewer bootstrap, decision open/tally, removal tally, **ops roles bootstrap/tally** |
 
-Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf upgrade → escrow contrib index → funding windows / milestones / idle ballots → **`processExpiredGovernance`** (expired review / removal / ops-role tallies).
+Cron (every minute): LN claimer → builder claim lifecycle → **`processClaimApplicationTimers`** (select grace / auto-award) → LN contrib conf upgrade → escrow contrib index (incl. floor → start claim window) → funding windows / milestones / idle ballots → **`processExpiredGovernance`** (expired review / removal / ops-role tallies).
 
 ---
 
 ## 13. KV / R2 key patterns (operational)
 
-**USERS:** `user:`, `uname:`, `watch:`, `paytxid:`, `bondtxid:`, `claim:`, `claimpendinguser:`, `claimactive:` + `claimactive:index`, `claimowner:`, `claimfulfiller:`, `claimledger:`, `claimrate:`, `claimchallenge:`, `claimreopen:`, `claimreopen_needs_human:`, `bondrefundable:index`, `escrow:next_index`, `escrowwatch:index`, `release_blocked:`, `ballot:`, `ballotopen:`, `mediaupload:`, `reviewer:` + `reviewer:index` + `reviewer:completions` + `reviewer:completion:`, `revdec:` + `revdecopen:` + `revdec:index`, `rebuttal:`, `revremove:` + `revremoveopen:` + `revremove:openindex` + `revremovecd:`, `claimext:`, `fundext:`, `listchal:`, `opsrole:` + `opsrole:index`, `opsroleballot:` + `opsroleballot:openindex` + `opsroleballotopen:` + `opsroleballotcd:`, `forceoutcome:` + `forceoutcome:index`, `xoauth:` (SESSIONS)
+**USERS:** `user:`, `uname:`, `watch:`, `paytxid:`, `bondtxid:`, `claim:`, `claimpendinguser:`, `claimactive:` + `claimactive:index`, `claimowner:`, `claimfulfiller:`, `claimledger:`, `claimrate:`, `claimchallenge:`, `claimreopen:`, `claimreopen_needs_human:`, `claimapp:`, `claimappuser:`, `claimapp:openindex`, `bondrefundable:index`, `escrow:next_index`, `escrowwatch:index`, `release_blocked:`, `ballot:`, `ballotopen:`, `mediaupload:`, `reviewer:` + `reviewer:index` + `reviewer:completions` + `reviewer:completion:`, `revdec:` + `revdecopen:` + `revdec:index`, `rebuttal:`, `revremove:` + `revremoveopen:` + `revremove:openindex` + `revremovecd:`, `claimext:`, `fundext:`, `listchal:`, `opsrole:` + `opsrole:index`, `opsroleballot:` + `opsroleballot:openindex` + `opsroleballotopen:` + `opsroleballotcd:`, `forceoutcome:` + `forceoutcome:index`, `xoauth:` (SESSIONS)
 
 **CONTRIBUTIONS:** `contrib:{proposalId}`  
 
@@ -600,6 +623,9 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Submission fee / claim bond | 10,000 sats exact |
 | Claim floor | 100,000 sats confirmed |
 | Claim window | 90 days from `claimed_at` + **at most one** +30d claim extension |
+| Claim mode default | `proposer_select` (`first_bonded` \| `proposer_select`) |
+| Application window | 3 / 7 / 14 days (starts at claimable); decision grace 3d |
+| Max claim applications | 10 / proposal; max collaborators 5 (credit-only) |
 | Checkpoint | day 45 + 7d grace |
 | Pending TTL | 72 hours |
 | Reclaim cooldown | 30 days |
@@ -640,7 +666,7 @@ Cron (every minute): LN claimer → builder claim lifecycle → LN contrib conf 
 | Mainnet readiness smoke | `cd workers && npm run smoke:mainnet` | None (refuses unless network=mainnet) |
 | Opt-in spend | Manual Sparrow on **your** signet addresses | Signet sats |
 
-Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, **escrow mode hard boundary**, escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility + git mirror helpers, **ops role gate/nominate/vote/tally**, **claim extension**, **listing challenge open**, **release `decision_id` binding** + force audit, governance cron early-tally rejection, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation, SPA governance + builder helpers.
+Coverage emphasis: HOOK_SECRET, fee anti-replay, claim pending/active/lifecycle, **claim applications (modes / auto-award / org gate)**, contrib identity, ballots, FUNDABLE, checkpoint SSRF, ledger retention, **escrow mode hard boundary**, escrow allocate, reviewer quorum math, AI triage fallback, rebuttal outcome block, X OAuth PKCE, funder removal eligibility + git mirror helpers, **ops role gate/nominate/vote/tally**, **claim extension**, **listing challenge open**, **release `decision_id` binding** + force audit, governance cron early-tally rejection, nested FM round-trip, proposal amend auth/status gates, depends_on / related_work validation, SPA governance + builder helpers.
 
 ---
 
@@ -672,7 +698,7 @@ Bounty path: [`bounty-psbt.md`](bounty-psbt.md).
 | Automated refund batching (**direct**) | **v1 deferred** — register + keyholder batch only. Bounty uses pool-refund branches |
 | Browser / e2e suite | Unit/HTTP only — no Playwright against live UI |
 
-**Already shipped (not gaps):** escrow mode hard boundary; Sparrow signet demo escrows on proposals `main` (#6); flip script + mainnet/signet smokes; Pages network vars; Completeness `validate` on `main`; reviewer decisions + funder removal; **one-shot** claim/funding extensions; listing challenge (API + SPA); `/declined` + contributor badges; platform-fee advisory; hardened `force` outcome; ops-role nominate/vote/tally + volume gate; removal git mirror code; cron governance tallies; `decision_id` release binding + force audit; **bounty structured PSBT** constructor + hash-gated sign/combine (CI only — A2b not run).
+**Already shipped (not gaps):** escrow mode hard boundary; Sparrow signet demo escrows on proposals `main` (#6); flip script + mainnet/signet smokes; Pages network vars; Completeness `validate` on `main`; reviewer decisions + funder removal; **one-shot** claim/funding extensions; listing challenge (API + SPA); `/declined` + contributor badges; platform-fee advisory; hardened `force` outcome; ops-role nominate/vote/tally + volume gate; removal git mirror code; cron governance tallies; `decision_id` release binding + force audit; **bounty structured PSBT** constructor + hash-gated sign/combine (CI only — A2b not run); **Q9 bonded applications** (`first_bonded` / `proposer_select`, auto-award, org apply, credit collaborators).
 
 ---
 
@@ -686,13 +712,14 @@ Bounty path: [`bounty-psbt.md`](bounty-psbt.md).
 4. Donors send signet sats (Lightning off on signet); balance updates on site.
 5. At ≥100k confirmed, project is open to claim.
 
-### B. Claim and deliver
+### B. Apply, award, deliver
 
-1. Builder pays bond → site opens claim PR → slot held in KV.
-2. Reviewer merges → cron sets `claimed_at` from `merged_at`.
-3. Checkpoint by day 45 (+grace); deliverable submit → AI Reviewer (advisory) → `in_review`. Humans only after a donor flag.
-4. Optional: fulfiller requests **one** 30-day claim extension → reviewers approve → `claim_window_ends_at` moves (second request → 409).
-5. Hook outcome `completed` with `decision_id` of tallied `deliverable_confirm` / `second_review` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat + `platform_fee` advisory; keyholders cosign the on-chain release (incl. 3% platform output) out-of-band.
+1. At ≥ floor, applications open (`claim_mode` from propose). Builders apply with bond (public list + bond status). `first_bonded` awards immediately; `proposer_select` waits for Accept or auto-award after window+grace.
+2. Award opens claim PR → slot held in KV; losers’ bonds refundable.
+3. Reviewer merges → cron sets `claimed_at` from `merged_at`.
+4. Checkpoint by day 45 (+grace); deliverable submit → AI Reviewer (advisory) → `in_review`. Humans only after a donor flag.
+5. Optional: fulfiller requests **one** 30-day claim extension → reviewers approve → `claim_window_ends_at` moves (second request → 409).
+6. Hook outcome `completed` with `decision_id` of tallied `deliverable_confirm` / `second_review` → **requires `escrow_mode=multisig`** (403 in single-key-test). On multisig: bond refundable + earned reviewer seat + `platform_fee` advisory; keyholders cosign the on-chain release (incl. 3% platform output) out-of-band. Credit collaborators do **not** earn seats.
 
 ### C. Failure / abandon / listing challenge
 
@@ -716,7 +743,7 @@ Bounty path: [`bounty-psbt.md`](bounty-psbt.md).
 |------|----------------|
 | Worker entry + cron | `workers/src/index.ts` |
 | Fee/bond | `workers/src/lib/fee-payment.ts` |
-| Claims | `workers/src/lib/builder-claim.ts`, `claim-lifecycle.ts`, `claim-abuse.ts`, `routes/claims.ts` |
+| Claims | `workers/src/lib/claim-applications.ts`, `builder-claim.ts`, `claim-lifecycle.ts`, `claim-abuse.ts`, `routes/claims.ts` |
 | Reviewers / decisions | `lib/reviewers.ts`, `lib/review-decisions.ts`, `lib/review-quorum.ts`, `lib/ai-review.ts`, `lib/rebuttal.ts`, `lib/reviewer-removal.ts`, `lib/removal-git.ts`, `lib/claim-extension.ts`, `lib/funding-extension.ts`, `lib/listing-challenge.ts`, `lib/governance-cron.ts`, `lib/platform-fee.ts`, `lib/contributor-badges.ts`, `routes/reviewers.ts` |
 | Ops roles | `lib/ops-roles.ts`, `lib/ops-role-ballots.ts`, `lib/ops-role-params.ts`, `routes/ops.ts` |
 | Contrib / ballots / refunds | `lib/contrib.ts`, `lib/ballots.ts`, `routes/contributions.ts`, `routes/ballots.ts`, `routes/refunds.ts` |
