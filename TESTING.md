@@ -40,7 +40,7 @@ TEST_SUBMISSION_FEE_ADDRESS = "tb1YOUR_ADDRESS_OR_SECOND"
 cd workers && npx wrangler deploy
 ```
 
-Check: `curl https://plebly-api.securesovereigns.workers.dev/health`  
+Check: `curl https://api.plebly.fund/health`  
 → `"network":"signet"`, `"signet_test_escrow":true`
 
 ## 3. Get signet sats

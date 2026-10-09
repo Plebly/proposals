@@ -10,7 +10,7 @@ funding on any HTTPS page:
 
 The widget links to the stable proposal URL, `https://plebly.fund/p/PLEBLY-42`.
 It fetches the read-only Worker endpoint
-`GET https://plebly-api.securesovereigns.workers.dev/embed/PLEBLY-42`, which
+`GET https://api.plebly.fund/embed/PLEBLY-42`, which
 returns:
 
 ```json

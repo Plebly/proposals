@@ -4,7 +4,7 @@
  * POST /escrow/allocate with HOOK_SECRET.
  *
  * Env:
- *   PLEBLY_API_URL — e.g. https://plebly-api.securesovereigns.workers.dev
+ *   PLEBLY_API_URL — e.g. https://api.plebly.fund
  *   PLEBLY_HOOK_SECRET — Worker HOOK_SECRET
  */
 import { execSync } from "node:child_process";

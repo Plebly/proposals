@@ -2,13 +2,15 @@
 # Seed 1–5 bootstrap reviewer seats via the Worker hook.
 # Mainnet / default Worker enforces 3–5; Signet allows 1–5 (single-human bootstrap).
 # Usage:
+#   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:a github:b github:c
 #   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:a github:b github:c github:d github:e
 #   HOOK_SECRET=… ./scripts/bootstrap-reviewers.sh github:184555205   # Signet one-human
+# A later run may add seats up to five if it includes every id already seated.
 # Optional:
-#   API=https://plebly-api.securesovereigns.workers.dev
+#   API=https://api.plebly.fund
 set -euo pipefail
 
-API="${API:-https://plebly-api.securesovereigns.workers.dev}"
+API="${API:-https://api.plebly.fund}"
 API="${API%/}"
 
 if [[ -z "${HOOK_SECRET:-}" ]]; then
