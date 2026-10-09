@@ -9,6 +9,7 @@ status: pr_open
 target_sats: null
 # milestones[].dependencies = prior milestone ids in this file (Q11), e.g. [m1]
 milestones: []
+# Optional per-milestone funding_threshold_sats: unlock marker on the funding bar (display only)
 # Blocking deps on other initiatives (kind: plebly | external)
 depends_on: []
 # Non-blocking prior art / external work (https links)
