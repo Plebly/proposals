@@ -15,6 +15,14 @@ test("schema exposes post-MVP foundation fields", () => {
   assert.equal(schema.properties.tags.maxItems, 12);
   assert.ok(schema.properties.parent_initiative);
   assert.ok(schema.properties.delivery_window_ends_at);
+  assert.ok(
+    schema.properties.milestones.items.properties.funding_threshold_sats,
+  );
+  assert.equal(
+    schema.properties.milestones.items.properties.funding_threshold_sats
+      .minimum,
+    1,
+  );
 });
 
 test("template frontmatter includes proposal_type and tags", () => {
@@ -22,4 +30,5 @@ test("template frontmatter includes proposal_type and tags", () => {
   assert.match(template, /proposal_type:\s*bounty/);
   assert.match(template, /tags:\s*\[/);
   assert.match(template, /parent_initiative:/);
+  assert.match(template, /funding_threshold_sats/);
 });

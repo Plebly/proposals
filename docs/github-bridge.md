@@ -23,11 +23,45 @@ Install the **Plebly** GitHub App on any repository to turn an issue into a Pleb
 
 Webhook URL (paste into App settings): `https://plebly-api.securesovereigns.workers.dev/github/webhook`
 
-Events: `installation`, `installation_repositories`, `issues`, `issue_comment`.
+### Permissions first (then events appear)
 
-Permissions: **Issues** (read/write) on customer installs; **Contents** + **Pull requests** on the proposals install (same App permission set applies everywhere).
+Set these under **Repository permissions**, then scroll to **Subscribe to events** (the event checklist only shows events allowed by the permissions above):
+
+| Permission | Access |
+|------------|--------|
+| **Issues** | Read and write |
+| **Contents** | Read and write |
+| **Pull requests** | Read and write |
+| **Metadata** | Read-only (required; usually auto) |
+
+### Subscribe to events (UI labels)
+
+After Issues is granted, check:
+
+- **Issues** (API: `issues` — label → draft)
+- **Issue comment** (API: `issue_comment` — `/plebly` command)
+
+Do **not** rely on the list you see without Issues permission (Push, Fork, Star, etc.). You do **not** need Pull request / Push / Workflow events for the bridge.
+
+`installation` / `installation_repositories` are App lifecycle deliveries (map install → repos). They often are **not** in that same checkbox list (or only “Installation target” appears, which is a rename event — skip it). Leave webhooks enabled; GitHub still sends install/repo-access payloads to the App webhook URL.
 
 Still human: make the App public/optional (or installable), set webhook URL + secret in the GitHub App UI, install on at least one non-`Plebly/proposals` test repo.
+
+### App listing copy (optional)
+
+**Description:** Turn a GitHub issue into a Plebly Bitcoin bounty draft. Label `plebly` or comment `/plebly`, pay the submission fee on plebly.fund, then fund the escrow after listing.
+
+**Homepage URL:** `https://plebly.fund`
+
+### Not an App setting: `PLEBLY_HOOK_SECRET`
+
+That secret is for **GitHub Actions on `Plebly/proposals`**, not the App form:
+
+1. Repo → **Settings → Secrets and variables → Actions → New repository secret**
+2. Name: `PLEBLY_HOOK_SECRET`
+3. Value: the Worker’s existing `HOOK_SECRET` (ops hook; never reuse `GITHUB_WEBHOOK_SECRET` or `SESSION_SECRET`)
+
+Used by `allocate-on-merge.yml` to call `POST /escrow/allocate`. `vars.PLEBLY_API_URL` is already set.
 
 ## Authz
 
