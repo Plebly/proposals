@@ -1,7 +1,7 @@
 ---
 id: PLEBLY-SIGNET-DEMO
 title: "Signet smoke test bounty"
-status: listed
+status: declined
 target_sats: 100000
 milestones:
   - id: smoke-list
@@ -16,8 +16,6 @@ milestones:
     out_of_scope: "Production keyholders, Lightning, or real deliverable review"
     allocation_sats: 50000
     deadline: "2026-09-15"
-escrow_address: "tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz"
-escrow_index: 0
 submission_fee_txid: "0000000000000000000000000000000000000000000000000000000000000000"
 proposer:
   username: secsovereign
@@ -27,6 +25,8 @@ created_at: "2026-07-24T00:00:00Z"
 ---
 
 # Signet smoke test bounty
+
+> Retired. This smoke listing used the shared single-key signet test escrow, which was retired at the multisig cutover. It no longer accepts funds.
 
 ## Problem
 
