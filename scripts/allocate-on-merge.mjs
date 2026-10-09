@@ -4,7 +4,7 @@
  * POST /escrow/allocate with HOOK_SECRET.
  *
  * Env:
- *   PLEBLY_API_URL — e.g. https://plebly-api.securesovereigns.workers.dev
+ *   PLEBLY_API_URL — e.g. https://api.plebly.fund
  *   PLEBLY_HOOK_SECRET — Worker HOOK_SECRET
  *   ESCROW_ADDRESS_ALLOWLIST / TEST_ESCROW_ADDRESS — if escrow already set, must match
  *   GITHUB_EVENT_BEFORE / GITHUB_SHA — push range (preferred over HEAD~1)

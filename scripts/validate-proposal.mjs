@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { filenameIdErrors } from "./filename-id.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -65,7 +66,7 @@ function loadProposal(filePath) {
 
 /** Directory basename under proposals/ → expected status set. */
 const DIR_STATUS = {
-  listed: new Set(["listed", "declined_fundable", "funding", "claimable"]),
+  listed: new Set(["listed", "declined", "declined_fundable", "funding", "claimable"]),
   funding: new Set(["funding", "claimable", "listed"]),
   claimable: new Set(["claimable", "funding"]),
   claimed: new Set(["claimed", "in_review"]),
@@ -115,10 +116,8 @@ function validateFile(filePath) {
   ) {
     errors.push("milestones: required when target_sats >= 1000000");
   }
-  const network = (process.env.BITCOIN_NETWORK || "").toLowerCase().trim();
-  if (!network) {
-    errors.push("BITCOIN_NETWORK env required (signet|testnet|mainnet)");
-  } else {
+  const network = (process.env.BITCOIN_NETWORK || "signet").toLowerCase().trim();
+  {
     const mainnet = network === "mainnet" || network === "bitcoin";
     const hrp = mainnet ? "bc1" : "tb1";
     const escrow = proposal.escrow_address;
@@ -158,6 +157,9 @@ function validateFile(filePath) {
     }
   }
 
+  errors.push(
+    ...filenameIdErrors(path.relative(root, path.resolve(filePath)), proposal.id),
+  );
   return { ok: errors.length === 0, errors, proposal };
 }
 

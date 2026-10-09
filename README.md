@@ -1,12 +1,15 @@
 # Plebly Proposals
 
-Canonical, forkable record for [plebly.fund](https://plebly.fund) bounties.
+Published rules for [plebly.fund](https://plebly.fund): fees, keyholders, reviewers, and schemas.
 
-- Proposals enter via pull request (direct GitHub or the site Worker).
-- Completeness is checked by CI.
-- Escrow balances live on Bitcoin; this repo holds proposal text, reviewer decisions, and published keys.
+Live listings are on the site (Worker catalog). This repo is not an uncensorable listing record — GitHub or the operator can take it down, and the website chooses what to list.
+
+- Escrow balances live on Bitcoin.
+- `PARAMETERS.md`, `KEYHOLDERS.md`, and TOS are the published protocol text.
 
 ## Layout
+
+Published protocol files. Listing folders below are leftover / fallback, not the live catalog.
 
 | Path | Purpose |
 |------|---------|
@@ -15,21 +18,18 @@ Canonical, forkable record for [plebly.fund](https://plebly.fund) bounties.
 | `KEYHOLDERS.md` | Escrow / ops keyholders and descriptors |
 | `REVIEWERS.md` | Active reviewer roster |
 | `ESCROW_INDEX.md` | Monotonic index → proposal id |
-| `proposals/` | Proposal records by status folder |
+| `proposals/` | Legacy proposal markdown by status folder (not the live listing path) |
 | `funders/` | Per-proposal contribution mirrors |
 | `decisions/` | Reviewer votes, dissent, rebuttals |
 | `AI_PROMPTS/` | Versioned AI first-pass prompts |
 | `schema/` | JSON Schema for proposals |
 | `survival/` | Migration / mirror process |
 
-## Submit a proposal
+## List a project
 
-1. Copy `template/proposal.md`.
-2. Pay the submission fee (see `PARAMETERS.md`) and record the txid.
-3. Open a PR adding the file under `proposals/unindexed/`.
-4. CI must pass; fee must verify before merge.
+Use [plebly.fund/propose](https://plebly.fund/propose). Pay the on-chain submission fee. The Worker catalogs the listing. This repo is not required for a project to go live.
 
-Or label a GitHub issue `plebly-proposal` (or `plebly`) to open a draft PR via Actions. Third-party funding embeds: [`docs/embed.md`](docs/embed.md).
+Third-party funding embeds: [`docs/embed.md`](docs/embed.md).
 
 ## License
 

@@ -51,8 +51,8 @@ const mainnet = network === "mainnet" || network === "bitcoin";
 
 /** Repo-relative paths for historical seed demos (signet only). */
 const ZERO_TXID_ALLOWLIST = new Set([
-  "proposals/listed/demo-signet-smoke.md",
-  "proposals/listed/knots-size-value-spam.md",
+  "PLEBLY-SIGNET-DEMO.md",
+  "PLEBLY-KNOTS-SIZE-VALUE-SPAM.md",
 ]);
 
 function allowsZeroFeeTxid(file) {

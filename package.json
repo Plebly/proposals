@@ -11,7 +11,7 @@
     "parameters:sync": "node scripts/sync-parameters.mjs",
     "parameters:check": "node scripts/sync-parameters.mjs --check",
     "check:escrow": "BITCOIN_NETWORK=${BITCOIN_NETWORK:-signet} node scripts/check-escrow-address.mjs",
-    "test": "node --test scripts/check-fee-payments.test.mjs scripts/validate-schema-fields.test.mjs scripts/parameters.test.mjs scripts/security-gates.test.mjs"
+    "test": "node --test scripts/assign-sequence.test.mjs scripts/assign-sequence-identical.test.mjs scripts/validate-proposal.test.mjs scripts/filename-id.test.mjs scripts/check-fee-payments.test.mjs scripts/validate-schema-fields.test.mjs scripts/parameters.test.mjs scripts/security-gates.test.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

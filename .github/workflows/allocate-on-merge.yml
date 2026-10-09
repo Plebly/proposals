@@ -10,7 +10,7 @@ on:
 
 jobs:
   allocate:
-    runs-on: [self-hosted, Linux, X64, plebly]
+    runs-on: plebly
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+      - run: npm ci
       - name: Allocate missing escrows
         env:
           PLEBLY_HOOK_SECRET: ${{ secrets.PLEBLY_HOOK_SECRET }}
