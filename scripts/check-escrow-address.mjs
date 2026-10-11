@@ -138,7 +138,7 @@ function priorEscrowAtPath(file) {
 }
 
 /** Current-tree escrow occupancy by address → proposal id (non-test shared). */
-function currentEscrowOwners(filesBeingChecked) {
+function currentEscrowOwners() {
   const owners = new Map();
   const proposalsDir = path.join(root, "proposals");
   function walk(dir) {
@@ -164,20 +164,6 @@ function currentEscrowOwners(filesBeingChecked) {
     }
   }
   walk(proposalsDir);
-  // Prefer ids from files under check (they may be unsaved walks already covered)
-  for (const file of filesBeingChecked) {
-    if (!fs.existsSync(file)) continue;
-    try {
-      assertSafeGitPath(file);
-    } catch {
-      continue;
-    }
-    const raw = fs.readFileSync(file, "utf8");
-    const id = parseId(raw);
-    const escrow = parseEscrow(raw);
-    if (!id || !escrow || (testEscrow && escrow === testEscrow)) continue;
-    owners.set(escrow, id);
-  }
   return owners;
 }
 
@@ -241,11 +227,14 @@ for (const file of files) {
   // exclusive to this proposal id across the tree.
   if ((prior === undefined || prior === null) && id) {
     if (!(testEscrow && addrLc === testEscrow)) {
-      const owners = currentEscrowOwners(files);
-      const owner = owners.get(addrLc);
-      if (owner && owner !== id && !String(owner).split("|").includes(id)) {
+      const owners = currentEscrowOwners();
+      const ownerIds = String(owners.get(addrLc) || "")
+        .split("|")
+        .filter(Boolean);
+      const others = ownerIds.filter((ownerId) => ownerId !== id);
+      if (others.length) {
         console.error(
-          `${rel}: escrow_address already used by proposal id ${owner} — refuse first-intro reassignment`,
+          `${rel}: escrow_address already used by proposal id ${others.join("|")} — refuse first-intro reassignment`,
         );
         failed++;
         continue;
