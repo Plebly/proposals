@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
  * List changed proposal markdown paths between two git refs.
- * Fails closed if any proposals/*.md path is non-canonical (uppercase,
- * non-ASCII, shell metachar, etc.) so fee/escrow gates cannot be skipped.
+ * Fails closed if any proposals/*.md path is non-canonical (spaces, non-ASCII,
+ * shell metacharacters, or "..") so fee/escrow gates cannot be skipped.
+ * Uppercase is canonical: proposal ids are PLEBLY-… and the filename stem
+ * must equal that id.
  *
  * Usage: node scripts/list-changed-proposals.mjs <base> [head]
  * Env: none required.
@@ -12,7 +14,7 @@
 import { execFileSync } from "node:child_process";
 
 const SAFE_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const SAFE_PATH = /^proposals\/[a-z0-9][a-z0-9_./-]*\.md$/;
+const SAFE_PATH = /^proposals\/[A-Za-z0-9][A-Za-z0-9_./-]*\.md$/;
 
 const base = (process.argv[2] || "").trim();
 const head = (process.argv[3] || "HEAD").trim();
@@ -48,10 +50,10 @@ const all = out
   .map((s) => s.trim())
   .filter((f) => f.startsWith("proposals/") && f.endsWith(".md"));
 
-const bad = all.filter((f) => !SAFE_PATH.test(f));
+const bad = all.filter((f) => !SAFE_PATH.test(f) || f.includes(".."));
 if (bad.length) {
   console.error(
-    "Non-canonical proposal path(s) — rename to proposals/<dir>/<lowercase-ascii>.md:",
+    "Non-canonical proposal path(s) — rename to proposals/<dir>/<ascii-id>.md with no spaces or shell characters:",
   );
   for (const f of bad) console.error(`  - ${f}`);
   process.exit(1);

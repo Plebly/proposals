@@ -4,10 +4,13 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -82,6 +85,51 @@ test("the sole owner of an allowlisted escrow address still passes", () => {
   const file = join(root, "proposals/listed/PLEBLY-ONLY.md");
   writeFileSync(file, proposal("PLEBLY-ONLY", ADDR));
   const r = run(root, {}, file);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /allowlisted/);
+});
+
+function git(root, ...args) {
+  return execFileSync("git", args, { cwd: root, encoding: "utf8" });
+}
+
+function gitSandbox() {
+  const root = sandbox();
+  git(root, "init", "-q");
+  git(root, "config", "user.email", "escrow-test@example.com");
+  git(root, "config", "user.name", "escrow-test");
+  return root;
+}
+
+test("deleting a listing and republishing its escrow under a new id is refused", () => {
+  const root = gitSandbox();
+  writeFileSync(
+    join(root, "proposals/listed/PLEBLY-OLD.md"),
+    proposal("PLEBLY-OLD", ADDR),
+  );
+  git(root, "add", "proposals");
+  git(root, "commit", "-q", "-m", "base");
+  const base = git(root, "rev-parse", "HEAD").trim();
+  rmSync(join(root, "proposals/listed/PLEBLY-OLD.md"));
+  const incoming = join(root, "proposals/listed/PLEBLY-NEW.md");
+  writeFileSync(incoming, proposal("PLEBLY-NEW", ADDR));
+  const r = run(root, { ESCROW_COMPARE_REF: base }, incoming);
+  assert.notEqual(r.code, 0, r.out);
+  assert.match(r.out, /already used by proposal id PLEBLY-OLD/);
+});
+
+test("moving a listing to another directory keeps the same escrow", () => {
+  const root = gitSandbox();
+  const src = join(root, "proposals/listed/PLEBLY-OLD.md");
+  writeFileSync(src, proposal("PLEBLY-OLD", ADDR));
+  git(root, "add", "proposals");
+  git(root, "commit", "-q", "-m", "base");
+  const base = git(root, "rev-parse", "HEAD").trim();
+  mkdirSync(join(root, "proposals/funding"), { recursive: true });
+  const dst = join(root, "proposals/funding/PLEBLY-OLD.md");
+  writeFileSync(dst, readFileSync(src, "utf8").replace("status: listed", "status: funding"));
+  rmSync(src);
+  const r = run(root, { ESCROW_COMPARE_REF: base }, dst);
   assert.equal(r.code, 0, r.out);
   assert.match(r.out, /allowlisted/);
 });

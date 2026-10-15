@@ -96,10 +96,14 @@ function parseId(raw) {
   return !s || s === "null" ? "" : s;
 }
 
-/** Map proposal id → escrow on compare ref (full tree). */
-function baseEscrowById() {
-  const map = new Map();
-  if (!compareRef) return map;
+/**
+ * Compare-ref index. byId keeps immutability across renames. byAddress keeps
+ * a deleted file's escrow from being republished under a new proposal id.
+ */
+function baseIndex() {
+  const byId = new Map();
+  const byAddress = new Map();
+  if (!compareRef) return { byId, byAddress };
   let names = "";
   try {
     names = execFileSync(
@@ -112,20 +116,24 @@ function baseEscrowById() {
       },
     );
   } catch {
-    return map;
+    return { byId, byAddress };
   }
   for (const name of names.split("\n").filter(Boolean)) {
-    if (!SAFE_PATH.test(name)) continue;
+    if (!SAFE_PATH.test(name) || name.includes("..")) continue;
     try {
       const raw = gitShow(compareRef, name);
       const id = parseId(raw);
       const escrow = parseEscrow(raw);
-      if (id && escrow) map.set(id, escrow);
+      if (!id || !escrow) continue;
+      byId.set(id, escrow);
+      const prev = byAddress.get(escrow);
+      if (prev && !prev.split("|").includes(id)) byAddress.set(escrow, `${prev}|${id}`);
+      else if (!prev) byAddress.set(escrow, id);
     } catch {
       /* skip */
     }
   }
-  return map;
+  return { byId, byAddress };
 }
 
 function priorEscrowAtPath(file) {
@@ -175,7 +183,8 @@ if (files.length === 0) {
 
 let failed = 0;
 let sawEscrow = false;
-const idOnBase = baseEscrowById();
+const base = baseIndex();
+const idOnBase = base.byId;
 
 for (const file of files) {
   let rel;
@@ -231,7 +240,12 @@ for (const file of files) {
       const ownerIds = String(owners.get(addrLc) || "")
         .split("|")
         .filter(Boolean);
-      const others = ownerIds.filter((ownerId) => ownerId !== id);
+      const baseIds = String(base.byAddress.get(addrLc) || "")
+        .split("|")
+        .filter(Boolean);
+      const others = [
+        ...new Set([...ownerIds, ...baseIds].filter((ownerId) => ownerId !== id)),
+      ];
       if (others.length) {
         console.error(
           `${rel}: escrow_address already used by proposal id ${others.join("|")} — refuse first-intro reassignment`,
