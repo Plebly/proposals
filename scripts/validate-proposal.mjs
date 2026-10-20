@@ -17,6 +17,19 @@ const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validate = ajv.compile(schema);
 
+/** 21e6 BTC in sats. Amounts above this are not Bitcoin values. */
+const MAX_MONEY = 21_000_000 * 100_000_000;
+
+function satsRangeError(value, label, min) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    return `${label}: must be a safe integer number of sats`;
+  }
+  if (value < min || value > MAX_MONEY) {
+    return `${label}: must be between ${min} and ${MAX_MONEY} sats`;
+  }
+  return "";
+}
+
 const SECTION_RE = {
   deliverable: /^##\s+Deliverable\s*$/im,
   verification: /^##\s+Verification\s*$/im,
@@ -115,6 +128,33 @@ function validateFile(filePath) {
     (!proposal.milestones || proposal.milestones.length < 1)
   ) {
     errors.push("milestones: required when target_sats >= 1000000");
+  }
+  if (proposal.target_sats != null) {
+    const err = satsRangeError(proposal.target_sats, "target_sats", 0);
+    if (err) errors.push(err);
+  }
+  let allocationSum = 0;
+  let allocationSumOver = false;
+  for (const milestone of proposal.milestones || []) {
+    if (!milestone || typeof milestone !== "object") continue;
+    const allocErr = satsRangeError(milestone.allocation_sats, "allocation_sats", 1);
+    if (allocErr) {
+      errors.push(allocErr);
+    } else if (!allocationSumOver) {
+      allocationSum += milestone.allocation_sats;
+      if (!Number.isSafeInteger(allocationSum) || allocationSum > MAX_MONEY) {
+        errors.push(`milestones: allocation_sats sum must be <= ${MAX_MONEY} sats`);
+        allocationSumOver = true;
+      }
+    }
+    if (milestone.funding_threshold_sats != null) {
+      const thresholdErr = satsRangeError(
+        milestone.funding_threshold_sats,
+        "funding_threshold_sats",
+        1,
+      );
+      if (thresholdErr) errors.push(thresholdErr);
+    }
   }
   const network = (process.env.BITCOIN_NETWORK || "signet").toLowerCase().trim();
   {

@@ -115,6 +115,47 @@ test("target_sats >= 1,000,000 requires at least one milestone", () => {
   assert.equal(r.code, 0, r.out);
 });
 
+test("sats amounts stay inside the 21 million BTC supply, including the allocation sum", () => {
+  const maxMoney = 21_000_000 * 100_000_000;
+  const milestone = (id, sats, deadline) => `  - id: ${id}
+    deliverable: "Ship part ${id} of it"
+    verification: "Reviewer checks part ${id}"
+    out_of_scope: "no"
+    allocation_sats: ${sats}
+    deadline: "${deadline}"
+`;
+  const half = 1_500_000_000_000_000;
+  let r = run(
+    file(
+      doc({
+        extra: `target_sats: ${maxMoney}\nmilestones:\n${milestone("m1", half, "2027-01-01")}${milestone("m2", half, "2027-06-01")}`,
+      }),
+    ),
+  );
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /allocation_sats sum must be <= 2100000000000000/);
+
+  r = run(
+    file(
+      doc({
+        extra: `target_sats: ${maxMoney + 1}\nmilestones:\n${milestone("m1", maxMoney + 1, "2027-01-01")}`,
+      }),
+    ),
+  );
+  assert.equal(r.code, 1);
+  assert.match(r.out, /target_sats: must be between 0 and 2100000000000000 sats/);
+  assert.match(r.out, /allocation_sats: must be between 1 and 2100000000000000 sats/);
+
+  r = run(
+    file(
+      doc({
+        extra: `target_sats: ${maxMoney}\nmilestones:\n${milestone("m1", maxMoney, "2027-01-01")}`,
+      }),
+    ),
+  );
+  assert.equal(r.code, 0, r.out);
+});
+
 test("schema errors are reported: bad status enum, missing submission_fee_txid, short title", () => {
   let r = run(file(doc().replace("status: pr_open", "status: shipped")));
   assert.equal(r.code, 1);
