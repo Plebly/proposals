@@ -49,6 +49,27 @@ const mempoolApi = (
 ).replace(/\/$/, "");
 const mainnet = network === "mainnet" || network === "bitcoin";
 
+/**
+ * Section VII launch lock (parameters.json shared.submission_fee_sats /
+ * claim_bond_sats). The gate must not follow a PR that lowers either amount:
+ * a configured 0 matches every transaction that does not pay the fee address.
+ * 21e6 BTC in sats — an amount above this is not a Bitcoin value.
+ */
+const MIN_GATE_SATS = 10_000;
+const MAX_MONEY = 21_000_000 * 100_000_000;
+
+function requireGateAmount(name, value) {
+  if (!Number.isSafeInteger(value) || value < MIN_GATE_SATS || value > MAX_MONEY) {
+    console.error(
+      `${name} must be a safe integer >= ${MIN_GATE_SATS} sats (got ${value}) — refuse (fail closed)`,
+    );
+    process.exit(1);
+  }
+}
+
+requireGateAmount("submission fee", feeSats);
+requireGateAmount("claim bond", bondSats);
+
 /** Repo-relative paths for historical seed demos (signet only). */
 const ZERO_TXID_ALLOWLIST = new Set([
   "proposals/listed/PLEBLY-SIGNET-DEMO.md",
@@ -132,9 +153,16 @@ async function getTx(txid) {
 }
 
 function paidToFee(tx) {
-  return (tx.vout || [])
-    .filter((o) => o.scriptpubkey_address === feeAddress)
-    .reduce((s, o) => s + (o.value || 0), 0);
+  let sum = 0;
+  for (const o of tx.vout || []) {
+    if (o.scriptpubkey_address !== feeAddress) continue;
+    // Untrusted mempool JSON. A float or a non-integer must not be able to
+    // sum to the exact fee.
+    if (!Number.isSafeInteger(o.value) || o.value < 0) return Number.NaN;
+    sum += o.value;
+    if (!Number.isSafeInteger(sum) || sum > MAX_MONEY) return Number.NaN;
+  }
+  return sum;
 }
 
 let failed = 0;
