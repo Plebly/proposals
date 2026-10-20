@@ -3,8 +3,9 @@
  * Run: node --test scripts/check-fee-payments.test.mjs
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, copyFileSync } from "node:fs";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -92,5 +93,67 @@ describe("signet zero-fee seed allowlist", () => {
     const r = runFee({ BITCOIN_NETWORK: "mainnet" }, SEEDS[0]);
     assert.notEqual(r.code, 0, r.out);
     assert.match(r.out, /zero submission_fee_txid not allowed on mainnet/);
+  });
+});
+
+describe("fee gate amount is fail-closed", () => {
+  it("rejects an unpaid tx when parameters.json lowers the fee to 0", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "plebly-fee0-"));
+    const txid = "11".repeat(32);
+    mkdirSync(join(dir, "scripts"));
+    mkdirSync(join(dir, "proposals/listed"), { recursive: true });
+    copyFileSync(script, join(dir, "scripts/check-fee-payments.mjs"));
+    symlinkSync(join(root, "node_modules"), join(dir, "node_modules"));
+    const params = JSON.parse(readFileSync(join(root, "parameters.json"), "utf8"));
+    params.shared.submission_fee_sats = 0;
+    params.shared.claim_bond_sats = 0;
+    writeFileSync(join(dir, "parameters.json"), JSON.stringify(params));
+    writeFileSync(
+      join(dir, "proposals/listed/PLEBLY-FREE.md"),
+      `---\nid: PLEBLY-FREE\ntitle: "Unpaid"\nstatus: listed\nsubmission_fee_txid: "${txid}"\n---\n`,
+    );
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          txid,
+          status: { confirmed: true },
+          vout: [{ scriptpubkey_address: "tb1qother", value: 50_000 }],
+        }),
+      );
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const api = `http://127.0.0.1:${server.address().port}`;
+    try {
+      const r = await new Promise((resolve) => {
+        const child = spawn(
+          process.execPath,
+          [join(dir, "scripts/check-fee-payments.mjs"), "proposals/listed/PLEBLY-FREE.md"],
+          {
+            cwd: dir,
+            env: {
+              ...process.env,
+              BITCOIN_NETWORK: "signet",
+              SUBMISSION_FEE_ADDRESS: FEE,
+              MEMPOOL_API: api,
+            },
+          },
+        );
+        let out = "";
+        child.stdout.on("data", (c) => {
+          out += c;
+        });
+        child.stderr.on("data", (c) => {
+          out += c;
+        });
+        child.on("close", (code) => resolve({ code, out }));
+      });
+      assert.notEqual(r.code, 0, r.out);
+      assert.match(r.out, /must be a safe integer >= 10000/);
+      assert.doesNotMatch(r.out, /submission fee ok/);
+    } finally {
+      server.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
