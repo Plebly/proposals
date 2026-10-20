@@ -45,6 +45,34 @@ function listAllProposalMd() {
   return out;
 }
 
+/** Every proposals/**.md, including dirs --all does not assign into. */
+function everyProposalMd() {
+  const out = [];
+  const walk = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) walk(full);
+      else if (ent.name.endsWith(".md")) out.push(full);
+    }
+  };
+  walk(path.join(root, "proposals"));
+  return out;
+}
+
+function idAlreadyUsed(id, exceptFile) {
+  const skip = path.resolve(exceptFile);
+  for (const file of everyProposalMd()) {
+    if (path.resolve(file) === skip) continue;
+    if (path.basename(file, ".md") === id) return file;
+    const parsed = matter(fs.readFileSync(file, "utf8"), {});
+    const existing =
+      parsed.data.id != null ? String(parsed.data.id).trim() : "";
+    if (existing && existing !== "null" && existing === id) return file;
+  }
+  return "";
+}
+
 const args = process.argv.slice(2);
 const files =
   args.includes("--all") || args.length === 0
@@ -65,8 +93,11 @@ for (const file of files) {
   if (parsed.data.id && String(parsed.data.id).trim()) continue;
   const id = `PLEBLY-${year}-${String(next).padStart(3, "0")}`;
   const target = path.join(path.dirname(file), `${id}.md`);
-  if (target !== file && fs.existsSync(target)) {
-    console.error(`${file}: not assigned ${id}: ${target} already exists`);
+  const taken = idAlreadyUsed(id, file);
+  if ((target !== file && fs.existsSync(target)) || taken) {
+    console.error(
+      `${file}: not assigned ${id}: ${(taken || target)} already exists`,
+    );
     process.exitCode = 1;
     continue;
   }
