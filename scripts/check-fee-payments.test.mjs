@@ -3,8 +3,9 @@
  * Run: node --test scripts/check-fee-payments.test.mjs
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -92,5 +93,114 @@ describe("signet zero-fee seed allowlist", () => {
     const r = runFee({ BITCOIN_NETWORK: "mainnet" }, SEEDS[0]);
     assert.notEqual(r.code, 0, r.out);
     assert.match(r.out, /zero submission_fee_txid not allowed on mainnet/);
+  });
+});
+
+describe("fee txid replay across deleted files", () => {
+  const txid = "22".repeat(32);
+
+  function git(dir, ...args) {
+    return execFileSync("git", args, { cwd: dir, encoding: "utf8" });
+  }
+
+  function repo() {
+    const dir = mkdtempSync(join(tmpdir(), "plebly-replay-"));
+    git(dir, "init", "-q");
+    git(dir, "config", "user.email", "fee-replay@example.com");
+    git(dir, "config", "user.name", "fee-replay");
+    mkdirSync(join(dir, "proposals/listed"), { recursive: true });
+    return dir;
+  }
+
+  function proposal(id, extra = "") {
+    return `---
+id: ${id}
+title: "Replay fixture"
+status: listed
+submission_fee_txid: "${txid}"
+${extra}---
+`;
+  }
+
+  function listen() {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          txid,
+          status: { confirmed: true },
+          vout: [{ scriptpubkey_address: FEE, value: 10_000 }],
+        }),
+      );
+    });
+    return new Promise((resolve) => {
+      server.listen(0, "127.0.0.1", () => resolve(server));
+    });
+  }
+
+  function run(dir, ref, api, ...files) {
+    return new Promise((resolve) => {
+      const child = spawn(process.execPath, [script, ...files], {
+        cwd: dir,
+        env: {
+          ...process.env,
+          BITCOIN_NETWORK: "signet",
+          SUBMISSION_FEE_ADDRESS: FEE,
+          MEMPOOL_API: api,
+          FEE_COMPARE_REF: ref,
+        },
+      });
+      let out = "";
+      child.stdout.on("data", (c) => {
+        out += c;
+      });
+      child.stderr.on("data", (c) => {
+        out += c;
+      });
+      child.on("close", (code) => resolve({ code, out }));
+    });
+  }
+
+  it("rejects a txid after the listing that paid it was deleted", async () => {
+    const dir = repo();
+    const server = await listen();
+    const api = `http://127.0.0.1:${server.address().port}`;
+    try {
+      writeFileSync(join(dir, "proposals/listed/PLEBLY-OLD.md"), proposal("PLEBLY-OLD"));
+      git(dir, "add", "proposals");
+      git(dir, "commit", "-q", "-m", "pay");
+      rmSync(join(dir, "proposals/listed/PLEBLY-OLD.md"));
+      git(dir, "add", "-A");
+      git(dir, "commit", "-q", "-m", "delete");
+      const base = git(dir, "rev-parse", "HEAD").trim();
+      writeFileSync(join(dir, "proposals/listed/PLEBLY-NEW.md"), proposal("PLEBLY-NEW"));
+      const r = await run(dir, base, api, "proposals/listed/PLEBLY-NEW.md");
+      assert.notEqual(r.code, 0, r.out);
+      assert.match(r.out, /already used by PLEBLY-OLD/);
+      assert.doesNotMatch(r.out, /submission fee ok/);
+    } finally {
+      server.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("lets the same proposal id keep its txid when the text changes", async () => {
+    const dir = repo();
+    const server = await listen();
+    const api = `http://127.0.0.1:${server.address().port}`;
+    try {
+      const file = join(dir, "proposals/listed/PLEBLY-KEEP.md");
+      writeFileSync(file, proposal("PLEBLY-KEEP"));
+      git(dir, "add", "proposals");
+      git(dir, "commit", "-q", "-m", "pay");
+      const base = git(dir, "rev-parse", "HEAD").trim();
+      writeFileSync(file, proposal("PLEBLY-KEEP", 'note: "edited"\n'));
+      const r = await run(dir, base, api, "proposals/listed/PLEBLY-KEEP.md");
+      assert.equal(r.code, 0, r.out);
+      assert.match(r.out, /submission fee ok/);
+    } finally {
+      server.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

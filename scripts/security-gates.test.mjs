@@ -64,6 +64,8 @@ describe("completeness fee-gate fail-closed", () => {
       /mapfile -t files < <\(node scripts\/list-changed-proposals/,
     );
     assert.match(yml, /if ! changed="\$\(node scripts\/list-changed-proposals\.mjs/);
+    assert.match(yml, /export FEE_COMPARE_REF=/);
+    assert.doesNotMatch(yml, /--depth=1/);
   });
 });
 

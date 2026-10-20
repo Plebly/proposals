@@ -31,7 +31,7 @@ jobs:
             exit 1
           fi
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" --depth=1
+            git fetch origin "${{ github.base_ref }}"
             if ! changed="$(node scripts/list-changed-proposals.mjs "origin/${{ github.base_ref }}")"; then
               exit 1
             fi
@@ -62,10 +62,12 @@ jobs:
           fi
           # Do not force signet mempool — check-fee-payments.mjs picks network API when MEMPOOL_API unset.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" --depth=1
+            # Full history: a depth-1 fetch shallows the clone and hides deleted txids.
+            git fetch origin "${{ github.base_ref }}"
             if ! changed="$(node scripts/list-changed-proposals.mjs "origin/${{ github.base_ref }}")"; then
               exit 1
             fi
+            export FEE_COMPARE_REF="origin/${{ github.base_ref }}"
           else
             BEFORE="${{ github.event.before }}"
             if [ -z "${BEFORE}" ] || [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
@@ -73,10 +75,12 @@ jobs:
               if ! changed="$(git ls-files 'proposals/**/*.md')"; then
                 exit 1
               fi
+              export FEE_COMPARE_REF=""
             else
               if ! changed="$(node scripts/list-changed-proposals.mjs "${BEFORE}" "${{ github.sha }}")"; then
                 exit 1
               fi
+              export FEE_COMPARE_REF="${BEFORE}"
             fi
           fi
           if [ -n "${changed:-}" ]; then mapfile -t files <<< "$changed"; else files=(); fi
@@ -97,7 +101,7 @@ jobs:
             exit 1
           fi
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" --depth=1
+            git fetch origin "${{ github.base_ref }}"
             if ! changed="$(node scripts/list-changed-proposals.mjs "origin/${{ github.base_ref }}")"; then
               exit 1
             fi
