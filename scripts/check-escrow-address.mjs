@@ -201,9 +201,22 @@ for (const file of files) {
   const { data } = matter(raw);
   const id = parseId(raw);
   const escrowRaw = data.escrow_address;
-  if (escrowRaw == null || escrowRaw === "" || escrowRaw === false) continue;
-  const addr = String(escrowRaw).trim();
-  if (!addr || addr === "null") continue;
+  const addr =
+    escrowRaw == null || escrowRaw === false ? "" : String(escrowRaw).trim();
+  if (!addr || addr === "null") {
+    // Dropping the field is a change. A later PR would otherwise first-intro
+    // a different allowlisted address for the same id.
+    const priorPath = priorEscrowAtPath(rel);
+    const priorId = id ? idOnBase.get(id) : undefined;
+    const prior = priorPath != null ? priorPath : priorId != null ? priorId : null;
+    if (prior) {
+      console.error(
+        `${rel}: escrow_address removed (was ${prior}) — refuse (immutable after allocate)`,
+      );
+      failed++;
+    }
+    continue;
+  }
   sawEscrow = true;
   const addrLc = addr.toLowerCase();
 

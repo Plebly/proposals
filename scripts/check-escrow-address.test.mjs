@@ -134,6 +134,32 @@ test("moving a listing to another directory keeps the same escrow", () => {
   assert.match(r.out, /allowlisted/);
 });
 
+test("clearing an allocated escrow_address is refused", () => {
+  const root = gitSandbox();
+  const file = join(root, "proposals/listed/PLEBLY-KEEP.md");
+  writeFileSync(file, proposal("PLEBLY-KEEP", ADDR));
+  git(root, "add", "proposals");
+  git(root, "commit", "-q", "-m", "base");
+  const base = git(root, "rev-parse", "HEAD").trim();
+
+  writeFileSync(
+    file,
+    proposal("PLEBLY-KEEP", ADDR).replace(`escrow_address: "${ADDR}"\n`, "escrow_address: null\n"),
+  );
+  const cleared = run(root, { ESCROW_COMPARE_REF: base, ESCROW_ADDRESS_ALLOWLIST: `${ADDR},${OTHER}` }, file);
+  assert.notEqual(cleared.code, 0, cleared.out);
+  assert.match(cleared.out, /escrow_address removed \(was tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx\)/);
+
+  writeFileSync(
+    file,
+    `---\nid: PLEBLY-KEEP\ntitle: "Escrow exclusivity fixture"\nstatus: listed\n---\n`,
+  );
+  const omitted = run(root, { ESCROW_COMPARE_REF: base, ESCROW_ADDRESS_ALLOWLIST: `${ADDR},${OTHER}` }, file);
+  assert.notEqual(omitted.code, 0, omitted.out);
+  assert.match(omitted.out, /escrow_address removed/);
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("TEST_ESCROW_ADDRESS may be shared across proposal ids", () => {
   const root = sandbox();
   writeFileSync(
