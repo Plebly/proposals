@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-13  
 **Audience:** ops / keyholders / whoever will run live money-path tests  
-**Code status:** High + soft-launch product gaps that can be fixed in code are shipped (Workers + SPA on `main`). Bounty structured PSBT path is unit-tested; **A2b signet rehearsal has not been run**. Live deploy is still **signet** / `escrow_mode: single-key-test` until you flip. The [PR #7](https://github.com/Plebly/proposals/pull/7) protocol pack is on proposals `main`. This doc is **only** what humans still must do.
+**Code status:** High + soft-launch product gaps that can be fixed in code are shipped (Workers + SPA on `main`). Bounty structured PSBT path is unit-tested; **A2b signet rehearsal has not been run**. Live deploy is still **signet**. The signet Worker now runs `escrow_mode: multisig` (secrets `ESCROW_DESCRIPTOR` + `ESCROW_ADDRESS_MAP`; `TEST_ESCROW_ADDRESS` removed for the 2-of-3 rehearsal). Mainnet is a separate Worker (`plebly-api-production`) until cutover. The [PR #7](https://github.com/Plebly/proposals/pull/7) protocol pack is on proposals `main`. This doc is **only** what humans still must do.
 
 Related: [`bounty-psbt.md`](bounty-psbt.md) (how bounty money moves now), [`system-as-implemented.md`](system-as-implemented.md), [`post-mvp-roadmap.md`](post-mvp-roadmap.md), [`mainnet-launch-ops.md`](mainnet-launch-ops.md), [`TESTING.md`](../proposals/TESTING.md), [`KEYHOLDERS.md`](../proposals/KEYHOLDERS.md), [`REVIEWERS.md`](../proposals/REVIEWERS.md).
 
@@ -39,11 +39,12 @@ Launch blockers stay in this checklist. Product expansion beyond governance is i
 Live check:
 
 ```bash
-curl -sS https://api.plebly.fund/health | jq '{ok,network,escrow_mode,escrow_ready,escrow_descriptor_set,escrow_test_address_set,lightning_enabled,fee_address_mode,ai_review,x_oauth,mainnet_secrets_present}'
-# expect today: ok=true, network=signet, escrow_mode=single-key-test,
-#               escrow_ready=true, escrow_test_address_set=true, lightning_enabled=false,
-#               fee_address_mode=shared until A1b, ai_review=false, x_oauth=false,
-#               mainnet_secrets_present=false
+curl -sS https://api.plebly.fund/health | jq '{ok,network,escrow_mode,escrow_ready,escrow_descriptor_set,escrow_test_address_set,signet_test_escrow,lightning_enabled,fee_address_mode}'
+# expect today: ok=true, network=signet, escrow_mode=multisig, escrow_ready=true,
+#               escrow_descriptor_set=true, escrow_test_address_set=false,
+#               signet_test_escrow=false, lightning_enabled=false,
+#               fee_address_mode=shared until A1b
+# ai_review, x_oauth, mainnet_secrets_present moved to /health?ops=1 (hook secret).
 curl -sS https://api.plebly.fund/reviewers | jq .count
 # expect: 0 until you bootstrap
 ```
@@ -52,9 +53,11 @@ curl -sS https://api.plebly.fund/reviewers | jq .count
 
 ## Part A — Full signet testing (human)
 
-Deployed mode is **`escrow_mode: single-key-test`**. Allocate returns the shared `TEST_ESCROW_ADDRESS` (`tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz`). Workers do not hold that key.
+Deployed mode is **`escrow_mode: multisig`** (signet 2-of-3 rehearsal). Allocate hands each proposal the next address from `ESCROW_ADDRESS_MAP` (atomic; it never falls back to a shared address and returns `501 pending_address_map` when the map runs out). Workers hold no spend keys. `TEST_ESCROW_ADDRESS` (`tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz`, the `PLEBLY-SIGNET-DEMO` row in `ESCROW_INDEX.md`) is no longer configured on the Worker.
 
-**Important limit:** you can rehearse fee → submit → allocate → fund → claim → deliverable → review / extension / listing-challenge ballots on signet, but you **cannot** authorize disbursement via `POST /claims/outcome` `completed` until multisig mode is configured.
+Listings created before the cutover keep the `escrow_address` in their proposal file. The listed `PLEBLY-KNOTS-SIZE-VALUE-SPAM` escrow (`tb1qf8ag…`, `ESCROW_INDEX.md` index 1) is a single-key Sparrow receive (P2WPKH), not a 2-of-3 map address.
+
+Earlier this section described `single-key-test`, where every proposal shared `TEST_ESCROW_ADDRESS` and `POST /claims/outcome` `completed` could not authorize disbursement. That limit belonged to single-key-test; confirm the disbursement paths in A2b before relying on them.
 
 ### A1. Wallet you control (required for any spend)
 
@@ -62,18 +65,12 @@ Listed demos and Worker `TEST_*` already use **your** Sparrow signet receives (s
 
 1. Sparrow → Network → **Signet** → wallet that owns the live receives (keys stay local).
 2. Optional: create a **dedicated** fee/bond receive (recommended before serious rehearsal accounting).
-3. If you change addresses, set **only** test vars (do **not** set `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP` or the Worker becomes misconfigured):
-   ```toml
-   BITCOIN_NETWORK = "signet"
-   TEST_ESCROW_ADDRESS = "tb1…your_escrow…"
-   TEST_SUBMISSION_FEE_ADDRESS = "tb1…your_fee…"   # prefer ≠ escrow
-   ```
-4. Deploy and confirm mode:
+3. The Worker is in multisig mode. **Do not** set `TEST_ESCROW_ADDRESS` while `ESCROW_DESCRIPTOR` / `ESCROW_ADDRESS_MAP` are set: the Worker refuses that combination and reports `escrow_mode=misconfigured`. To change the fee receive, set only `TEST_SUBMISSION_FEE_ADDRESS` (prefer ≠ any escrow). To change escrow addresses, update `ESCROW_ADDRESS_MAP` (Part B).
+4. After any deploy, confirm mode:
    ```bash
-   cd workers && npx wrangler deploy
    curl -sS https://api.plebly.fund/health | jq .
-   # expect escrow_mode=single-key-test, escrow_ready=true, lightning_enabled=false,
-   #        escrow_config_error=null, escrow_descriptor_set=false
+   # expect escrow_mode=multisig, escrow_ready=true, lightning_enabled=false,
+   #        escrow_config_error=null, escrow_descriptor_set=true, escrow_test_address_set=false
    ```
 5. Keep listed demo `escrow_address` fields aligned with Sparrow (already done for smoke + Knots).
 6. Faucet fund fee + escrow addresses as needed.
@@ -106,7 +103,7 @@ Do this **before** a new 10k fee/bond. If a shared-address payment is already si
 |------|-------------|--------|
 | Submission fee | Sign in → last step issues **your** address → exact **10,000** sats | Shared `tb1qehu65…` only before A1b. After A1b, pay the issued address |
 | Submit / amend | Log in on plebly.fund | GitHub session |
-| Allocate | Hook `POST /escrow/allocate` (or allocate-on-merge once `PLEBLY_HOOK_SECRET` is set) | Response must show `escrow_mode: "single-key-test"` |
+| Allocate | Hook `POST /escrow/allocate` (or allocate-on-merge once `PLEBLY_HOOK_SECRET` is set) | Response must show `escrow_mode: "multisig"` and a per-proposal address from the map |
 | Donate | Send signet sats to escrow | mempool.space/signet |
 | Claim floor | Fund escrow to **≥ 100,000** sats confirmed | Or temporarily lower floor on a test branch only |
 | Claim bond | Exact **10,000** sats to the issued bond address | Same A1b toggle as the listing fee |
