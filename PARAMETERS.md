@@ -103,7 +103,7 @@ Publish mainnet fee address here, then set Worker `SUBMISSION_FEE_ADDRESS` + Git
 
 | Mode | Chain | Escrow |
 |------|-------|--------|
-| **Testing (now)** | Signet | Single `TEST_ESCROW_ADDRESS` you control — see `TESTING.md` |
+| **Testing (now)** | Signet | 2-of-3 multisig rehearsal (`ESCROW_DESCRIPTOR` + `ESCROW_ADDRESS_MAP`); the shared `TEST_ESCROW_ADDRESS` is retired. Pre-cutover listings keep their single-key addresses — see `ESCROW_INDEX.md` and `docs/remaining-human-steps.md` |
 | **Launch** | Mainnet only | 2-of-3 allowed until five seats; target 3-of-5 — see `KEYHOLDERS.md` |
 
 Workers default: `BITCOIN_NETWORK=signet`, mempool `https://mempool.space/signet/api`. Numeric knobs (including per-network claim floor) live in `parameters.json`.

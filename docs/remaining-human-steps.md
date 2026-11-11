@@ -55,6 +55,8 @@ curl -sS https://api.plebly.fund/reviewers | jq .count
 
 Deployed mode is **`escrow_mode: multisig`** (signet 2-of-3 rehearsal). Allocate hands each proposal the next address from `ESCROW_ADDRESS_MAP` (atomic; it never falls back to a shared address and returns `501 pending_address_map` when the map runs out). Workers hold no spend keys. `TEST_ESCROW_ADDRESS` (`tb1qhj27cegpek02g8g4peps0x7gqs0svvs888svyz`, the `PLEBLY-SIGNET-DEMO` row in `ESCROW_INDEX.md`) is no longer configured on the Worker.
 
+Listings created before the cutover keep the `escrow_address` in their proposal file. The listed `PLEBLY-KNOTS-SIZE-VALUE-SPAM` escrow (`tb1qf8ag…`, `ESCROW_INDEX.md` index 1) is a single-key Sparrow receive (P2WPKH), not a 2-of-3 map address.
+
 Earlier this section described `single-key-test`, where every proposal shared `TEST_ESCROW_ADDRESS` and `POST /claims/outcome` `completed` could not authorize disbursement. That limit belonged to single-key-test; confirm the disbursement paths in A2b before relying on them.
 
 ### A1. Wallet you control (required for any spend)
@@ -101,7 +103,7 @@ Do this **before** a new 10k fee/bond. If a shared-address payment is already si
 |------|-------------|--------|
 | Submission fee | Sign in → last step issues **your** address → exact **10,000** sats | Shared `tb1qehu65…` only before A1b. After A1b, pay the issued address |
 | Submit / amend | Log in on plebly.fund | GitHub session |
-| Allocate | Hook `POST /escrow/allocate` (or allocate-on-merge once `PLEBLY_HOOK_SECRET` is set) | Response must show `escrow_mode: "single-key-test"` |
+| Allocate | Hook `POST /escrow/allocate` (or allocate-on-merge once `PLEBLY_HOOK_SECRET` is set) | Response must show `escrow_mode: "multisig"` and a per-proposal address from the map |
 | Donate | Send signet sats to escrow | mempool.space/signet |
 | Claim floor | Fund escrow to **≥ 100,000** sats confirmed | Or temporarily lower floor on a test branch only |
 | Claim bond | Exact **10,000** sats to the issued bond address | Same A1b toggle as the listing fee |
