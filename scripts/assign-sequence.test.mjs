@@ -95,6 +95,23 @@ test("files that already have an id are left alone (name and bytes) and the coun
   assert.match(r.out, /No proposals needed sequence ids/);
 });
 
+test("refuses an id already used in another directory and does not consume the counter", () => {
+  const root = sandbox(9);
+  const id = `PLEBLY-${year}-009`;
+  mkdirSync(join(root, "proposals/funding"), { recursive: true });
+  writeFileSync(join(root, `proposals/funding/${id}.md`), proposal(id, "Already numbered."));
+  const file = join(root, "proposals/listed/new-slug.md");
+  const fileText = proposal();
+  writeFileSync(file, fileText);
+
+  const r = run(root, file);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /already exists/);
+  assert.equal(readFileSync(file, "utf8"), fileText);
+  assert.equal(existsSync(join(root, `proposals/listed/${id}.md`)), false);
+  assert.equal(nextSeq(root), 9);
+});
+
 test("refuses when <id>.md already exists: exit 1, nothing overwritten, counter not consumed", () => {
   const root = sandbox(9);
   const id = `PLEBLY-${year}-009`;
