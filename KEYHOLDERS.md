@@ -20,6 +20,8 @@ All test proposals share `TEST_ESCROW_ADDRESS` on signet. You can send and recei
 - Not a rehearsal of multisig release
 - Do not use for real mainnet bounties
 
+A listing on the `direct-builder` route is not a keyholder spend. Donors pay the named address. Keyholders do not sign that payment, and it cannot be refunded or redirected from here.
+
 Switch to the production block below before launch.
 
 ---
