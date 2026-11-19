@@ -75,8 +75,9 @@ const DIR_STATUS = {
   rejected: new Set(["rejected"]),
   underfunded: new Set(["underfunded", "refunding", "abandoned_vote"]),
   refunding: new Set(["refunding", "underfunded"]),
-  /** Archive / non-lifecycle holding area — status must still be explicit. */
+  /** Drafts from the issue bridge and template land here before an id is assigned. */
   unindexed: new Set([
+    "pr_open",
     "listed",
     "declined_fundable",
     "funding",
@@ -89,6 +90,8 @@ const DIR_STATUS = {
     "refunding",
     "abandoned_vote",
   ]),
+  /** Listing-challenge archive. The site lists declined and declined_fundable here. */
+  declined: new Set(["declined", "declined_fundable"]),
 };
 
 function validateFile(filePath) {

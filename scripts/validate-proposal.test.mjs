@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -154,4 +154,48 @@ test("--all validates the repo's proposals and fixtures and exits 0 on main", ()
   const r = run("--all");
   assert.equal(r.code, 0, r.out);
   assert.match(r.out, /PASS scripts\/fixtures\/valid\.md/);
+});
+
+test("pr_open drafts live under unindexed, and declined listings live under declined/", () => {
+  const box = mkdtempSync(join(tmpdir(), "plebly-dir-"));
+  mkdirSync(join(box, "scripts"));
+  mkdirSync(join(box, "schema"));
+  copyFileSync(script, join(box, "scripts/validate-proposal.mjs"));
+  copyFileSync(join(root, "scripts/filename-id.mjs"), join(box, "scripts/filename-id.mjs"));
+  copyFileSync(join(root, "schema/proposal.schema.json"), join(box, "schema/proposal.schema.json"));
+  symlinkSync(join(root, "node_modules"), join(box, "node_modules"));
+  const tx = "ab".repeat(32);
+  const body = (id, status) => `---
+id: ${id}
+title: "Directory status fixture"
+status: ${status}
+deliverable: "A concrete artifact that is long enough."
+verification: "An independent reviewer can check this artifact."
+out_of_scope: "Everything else."
+submission_fee_txid: "${tx}"
+---
+`;
+  const draft = join(box, "proposals/unindexed/PLEBLY-DRAFT.md");
+  const archived = join(box, "proposals/declined/PLEBLY-ARCHIVED.md");
+  const misplaced = join(box, "proposals/listed/PLEBLY-NOT-DRAFT.md");
+  mkdirSync(join(draft, ".."), { recursive: true });
+  mkdirSync(join(archived, ".."), { recursive: true });
+  mkdirSync(join(misplaced, ".."), { recursive: true });
+  writeFileSync(draft, body("PLEBLY-DRAFT", "pr_open"));
+  writeFileSync(archived, body("PLEBLY-ARCHIVED", "declined"));
+  writeFileSync(misplaced, body("PLEBLY-NOT-DRAFT", "pr_open"));
+  const local = spawnSync(
+    process.execPath,
+    [join(box, "scripts/validate-proposal.mjs"), draft, archived, misplaced],
+    { cwd: box, encoding: "utf8", env: { ...process.env, BITCOIN_NETWORK: "signet" } },
+  );
+  const out = `${local.stdout}${local.stderr}`;
+  try {
+    assert.match(out, /PASS proposals\/unindexed\/PLEBLY-DRAFT\.md/);
+    assert.match(out, /PASS proposals\/declined\/PLEBLY-ARCHIVED\.md/);
+    assert.match(out, /status "pr_open" does not belong under proposals\/listed\//);
+    assert.equal(local.status, 1);
+  } finally {
+    rmSync(box, { recursive: true, force: true });
+  }
 });
