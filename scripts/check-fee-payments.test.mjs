@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -66,9 +66,30 @@ describe("check-fee-payments helpers", () => {
   });
 });
 
+const SEED_BODY = (id) => `---
+id: ${id}
+title: "Signet seed"
+status: listed
+submission_fee_txid: "${ZERO}"
+---
+`;
+
+function withSeedFiles(fn) {
+  const written = SEEDS.map((rel, i) => {
+    const abs = join(root, rel);
+    writeFileSync(abs, SEED_BODY(i === 0 ? "PLEBLY-SIGNET-DEMO" : "PLEBLY-KNOTS-SIZE-VALUE-SPAM"));
+    return abs;
+  });
+  try {
+    return fn();
+  } finally {
+    for (const abs of written) unlinkSync(abs);
+  }
+}
+
 describe("signet zero-fee seed allowlist", () => {
   it("accepts the two documented seed listings and rejects any other zero txid", () => {
-    const seeds = runFee({}, ...SEEDS);
+    const seeds = withSeedFiles(() => runFee({}, ...SEEDS));
     assert.equal(seeds.code, 0, seeds.out);
     assert.match(seeds.out, /Fee checks passed/);
 
@@ -89,7 +110,7 @@ describe("signet zero-fee seed allowlist", () => {
   });
 
   it("rejects the seed placeholder txid on mainnet", () => {
-    const r = runFee({ BITCOIN_NETWORK: "mainnet" }, SEEDS[0]);
+    const r = withSeedFiles(() => runFee({ BITCOIN_NETWORK: "mainnet" }, SEEDS[0]));
     assert.notEqual(r.code, 0, r.out);
     assert.match(r.out, /zero submission_fee_txid not allowed on mainnet/);
   });
