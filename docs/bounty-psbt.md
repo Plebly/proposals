@@ -39,7 +39,7 @@ Mainnet flip: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 8. **Award** (when it happens) with an on-chain builder address → `clean` + `disputed` construct. Lightning Address / LNURL on bounty apply is rejected.
 9. **Challenge window** per work output: `<1M sats = 7d`, `1M–10M = 14d`, `>10M = 30d`. Type 2 requires `allocation_id` when more than one is pending.
    - Expire → select **clean** (skip monthly `completeClaimRelease`).
-   - Flag → select **disputed** and still open a `deliverable_confirm` ballot.
+   - Flag → select **disputed** to hold the output and open a `deliverable_confirm` ballot. That package is not signed. An approve selects `clean`. A finished reject drops it.
 10. **Selected branch** is the only one keyholders may sign. Hash-gated: SHA-256 of **raw PSBT bytes** must match the Worker hash.
 11. **Partials** store under private `psbtsign/`. At threshold the Worker **combines** and still does **not** broadcast (`broadcast: false` always).
 12. **A keyholder downloads the combined PSBT, broadcasts in Sparrow, records the txid.** Dual-ack: the proposer cannot confirm their own settle. `requireConfirmed: true` (signet allows unconfirmed).
@@ -56,7 +56,7 @@ Mainnet flip: [`mainnet-launch-ops.md`](mainnet-launch-ops.md).
 | `timelock` | After structure confirms | Cron when `now >= nLockTime` and selected is not already a terminal pay/refund | Same pool idea after the delivery window |
 | `reserve_refund` | After structure confirms (if reserve ≥ miner fee + dust) | Automatically after every work output is `settled` | Reviewer reserve → pool |
 | `clean` | After award + on-chain payout | Challenge expire, or `completeClaimRelease` on a frozen template | Builder + 1% BDI + platform fee + 2% keyholder |
-| `disputed` | After award + on-chain payout | Challenge flag | 1% penalty → reviewer escrow; rest per dispute outputs |
+| `disputed` | After award + on-chain payout | Challenge flag, as a hold | Not signed. An approve selects `clean`. A finished reject drops it. |
 
 Sub-dust fee/penalty lines fold into the builder. `BDI_FEE_ADDRESS` / `KEYHOLDER_POOL_ADDRESS` are optional; unset falls back to ops (`resolveFeeAddress`).
 
@@ -108,7 +108,7 @@ On a **frozen bounty template**:
 
 - Window expire → `selectBranch(clean)` and **skip** `completeClaimRelease`.
 - `completeClaimRelease` if it still runs → select clean, `skip_release: true` (no monthly coordinated spend).
-- Flag → `selectBranch(disputed)` + open `deliverable_confirm`.
+- Flag → `selectBranch(disputed)` to hold the output and open `deliverable_confirm`. The package is not signed. An approve selects `clean`. A finished reject drops it.
 
 On **direct** (no template): monthly `completeClaimRelease` is unchanged.
 
