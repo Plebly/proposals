@@ -4,7 +4,7 @@ Fixed at first public submission. Changes require a public process and thirty-da
 
 Community parameter votes are not live. Any future ballot system is volume-gated and cannot change these parameters until its rules and activation process are published.
 
-New listings pay the builder. A direct payment is final, is not held, and does not take the platform, BDI, keyholder, or reviewer-reserve fee.
+New listings pay the builder. The fees below apply only to a listing that already has an escrow. A direct payment is final, is not held, and does not take the platform, BDI, keyholder, or reviewer-reserve fee.
 
 **Canonical machine source:** [`parameters.json`](./parameters.json). After editing it, run `npm run parameters:sync` to refresh this file and generated TypeScript in `workers` / `plebly.fund`.
 
