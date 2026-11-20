@@ -237,16 +237,18 @@ Does not derive addresses in-Worker from the descriptor — Sparrow-precomputed 
 ### On-chain
 
 - Escrow address in proposal frontmatter.
-- Site shows **confirmed** address balance (mempool).
+- An escrow listing shows the **confirmed** address balance (mempool). A direct listing shows the recorded gift sum.
 - Claim floor: **100,000 sats** confirmed.
 - Funding bar: green to floor; overfund styling beyond floor.
 - Optional `target_sats` is display-only for claim eligibility.
 
-### Lightning (Boltz reverse swap)
+### Lightning
+
+A creator gift pays that creator's Lightning Address. It is not an OpenNode charge and it is not a Boltz reverse swap. Endowment and escrow invoices are OpenNode charges.
 
 - Enabled automatically on mainnet/testnet; **always off on signet** (OpenNode is not signet escrow).
 - UI gated by `lightningUiAllowed()` (signet always hidden).
-- `POST /lightning/invoice` verifies proposal escrow, creates reverse swap, stores encrypted secrets in `SWAPS`.
+- `POST /lightning/invoice` verifies proposal escrow, creates an OpenNode charge, and stores the encrypted row in `SWAPS`.
 - Cron polls OpenNode charges and batches on-chain withdraws into escrow; floor still uses on-chain confirmed balance only.
 - Mainnet prefers confirmed lockup before claim broadcast; signet allows mempool claim for speed.
 - Contributions upgraded to confirmed at **≥3** confs (`FUNDING_CONFIRMATIONS`).
